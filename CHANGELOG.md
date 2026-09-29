@@ -30,6 +30,10 @@ The toolkit now supports Claude Code, Codex, and Cursor equally, with one canoni
 - SKILL.md files no longer embed the preamble. They reference `$HOME/.agentic-workflow/toolkit/skills/_preamble.md`, and design skills also reference `_design-preamble.md`.
 - README, `planning/` docs, and package descriptions were rewritten for the new name and provider-neutral wording. The statusline, shell integration, and plugin marketplaces are documented as Claude Code only.
 
+### Fixed
+
+- `prism-mcp` never started. prism-mcp-server 5.1.0 only boots when `argv[1]` ends in `server.js`, and `npx` launches it through a `.bin` symlink, so it exited 0 silently. `setup.sh` now installs `prism-mcp-server@5.1.0` globally and registers `node <npm root -g>/prism-mcp-server/dist/server.js`.
+
 ---
 
 ## [Unreleased] - 2026-03-27

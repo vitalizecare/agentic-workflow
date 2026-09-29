@@ -120,7 +120,7 @@ test_cursor_mcp_merge_preserves_and_is_idempotent() {
   setup_env
   mkdir -p "$HOME/.cursor"
   echo '{"mcpServers":{"mine":{"url":"https://x"}},"other":1}' > "$HOME/.cursor/mcp.json"
-  AW_MCP_SERVERS='[{"name":"agentic-bridge","command":"node","args":["/b/mcp.js"]},{"name":"prism-mcp","command":"npx","args":["-y","p@1"],"env":{"PRISM_DASHBOARD_PORT":"7180"}}]'
+  AW_MCP_SERVERS='[{"name":"agentic-bridge","command":"node","args":["/b/mcp.js"]},{"name":"prism-mcp","command":"node","args":["/p/dist/server.js"],"env":{"PRISM_DASHBOARD_PORT":"7180"}}]'
   cursor_register_mcp >/dev/null
   local f="$HOME/.cursor/mcp.json"
   jq -e '.mcpServers.mine.url == "https://x" and .other == 1' "$f" >/dev/null || fail "existing entries not preserved"

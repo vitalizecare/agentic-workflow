@@ -580,17 +580,34 @@ fi
 PRISM_VERSION="5.1.0"          # pin: bump here when upgrading
 XCODEBUILDMCP_VERSION="2.3.0"  # pin: bump here when upgrading (keep config/mcp.json in sync)
 
+# prism-mcp only starts when argv[1] ends in "server.js"; npx and the npm bin
+# symlink both fail that check and the process exits 0 silently. Install
+# globally and launch dist/server.js with node directly.
+echo ""
+echo "Installing prism-mcp-server..."
+PRISM_SERVER="$(npm root -g)/prism-mcp-server/dist/server.js"
+_prism_installed="$(jq -r '.version // empty' "$(npm root -g)/prism-mcp-server/package.json" 2>/dev/null)"
+if [ "$_prism_installed" = "$PRISM_VERSION" ] && [ -f "$PRISM_SERVER" ]; then
+  echo "  prism-mcp-server: already installed ($PRISM_VERSION)"
+elif aw_dry; then
+  echo "  [dry-run] would run: npm install -g prism-mcp-server@$PRISM_VERSION"
+else
+  npm install -g "prism-mcp-server@$PRISM_VERSION" 2>&1 \
+    || { echo "FATAL: prism-mcp-server installation failed."; exit 1; }
+  echo "  prism-mcp-server: installed globally ($PRISM_VERSION)"
+fi
+
 AW_MCP_SERVERS="$(jq -nc \
   --arg bridge "$BRIDGE_DIR/dist/mcp.js" \
   --arg serena "$HOME/.local/bin/serena-docker" \
   --arg headroom "$HEADROOM_CMD" \
-  --arg prism "prism-mcp-server@$PRISM_VERSION" \
+  --arg prism "$PRISM_SERVER" \
   --arg xcode "xcodebuildmcp@$XCODEBUILDMCP_VERSION" \
   --arg darwin "$([ "$(uname)" = "Darwin" ] && echo 1 || echo 0)" '
   [ {name: "agentic-bridge", command: "node", args: [$bridge]},
     {name: "serena", command: $serena, args: []},
     (if $headroom != "" then {name: "headroom", command: $headroom, args: ["mcp", "serve"]} else empty end),
-    {name: "prism-mcp", command: "npx", args: ["-y", $prism], env: {PRISM_DASHBOARD_PORT: "7180"}},
+    {name: "prism-mcp", command: "node", args: [$prism], env: {PRISM_DASHBOARD_PORT: "7180"}},
     (if $darwin == "1" then {name: "xcodebuildmcp", command: "npx", args: ["-y", $xcode, "mcp"]} else empty end)
   ]')"
 export AW_MCP_SERVERS
