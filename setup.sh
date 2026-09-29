@@ -149,6 +149,8 @@ export AW_DRY_RUN TOOLKIT_DIR
 
 # shellcheck source=providers/lib.sh
 source "$SCRIPT_DIR/providers/lib.sh"
+TOOLKIT_DIR="$(aw_canonicalize "$TOOLKIT_DIR")"
+export TOOLKIT_DIR
 # shellcheck source=config/lib/install-agents.sh
 source "$SCRIPT_DIR/config/lib/install-agents.sh"
 for _p in $ALL_PROVIDERS; do

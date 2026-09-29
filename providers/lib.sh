@@ -236,17 +236,35 @@ aw_install_skills_into() {
 # via $HOME/.agentic-workflow/toolkit/skills/_shared regardless of provider.
 aw_link_toolkit() {
   local link="$AW_STATE_ROOT/toolkit"
+  local target current
+  target="$(aw_canonicalize "$TOOLKIT_DIR")"
   aw_run mkdir -p "$AW_STATE_ROOT"
-  if [ -L "$link" ] && [ "$(readlink "$link")" = "$TOOLKIT_DIR" ]; then
-    echo "  toolkit: $link → $TOOLKIT_DIR (up to date)"
-    return 0
+
+  if [ -e "$link" ] || [ -L "$link" ]; then
+    current="$(aw_canonicalize "$link")"
+    if [ "$current" = "$target" ]; then
+      echo "  toolkit: $link → $target (up to date)"
+      return 0
+    fi
   fi
+
   if [ -e "$link" ] && [ ! -L "$link" ]; then
+    if [ "$(aw_canonicalize "$link")" = "$target" ]; then
+      echo "  toolkit: $link → $target (repo root at stable path)"
+      return 0
+    fi
     echo "  WARN: $link exists and is not a symlink — moving it aside"
     aw_run mv "$link" "$link.bak.$(date +%s)"
   fi
-  aw_run ln -sfn "$TOOLKIT_DIR" "$link"
-  echo "  toolkit: $link → $TOOLKIT_DIR"
+  if [ -L "$link" ] && [ ! -e "$link" ]; then
+    aw_run rm -f "$link"
+  fi
+  if [ "$target" = "$link" ]; then
+    echo "FATAL: toolkit target equals $link — clone the repo outside $AW_STATE_ROOT/toolkit and re-run setup.sh from that clone."
+    exit 1
+  fi
+  aw_run ln -sfn "$target" "$link"
+  echo "  toolkit: $link → $target"
 }
 
 # Write $HOME/.agentic-workflow/providers: one "<name> <skills-dir>" line per

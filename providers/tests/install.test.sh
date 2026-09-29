@@ -88,6 +88,18 @@ $ext/polish-x"
   echo "PASS: test_external_skills_link_but_native_wins"
 }
 
+test_toolkit_link_repo_at_stable_path_is_noop() {
+  setup_env
+  export AW_STATE_ROOT="$HOME/.agentic-workflow"
+  mkdir -p "$AW_STATE_ROOT/toolkit/skills/_shared"
+  export TOOLKIT_DIR="$AW_STATE_ROOT/toolkit"
+  aw_link_toolkit >/dev/null
+  [ -d "$AW_STATE_ROOT/toolkit/skills/_shared" ] || fail "in-tree toolkit dir removed"
+  [ ! -L "$AW_STATE_ROOT/toolkit" ] || fail "should not replace in-tree repo dir with symlink"
+  teardown_env
+  echo "PASS: test_toolkit_link_repo_at_stable_path_is_noop"
+}
+
 test_toolkit_link_and_registry_merge() {
   setup_env
   aw_link_toolkit >/dev/null
@@ -158,6 +170,7 @@ test_refreshes_legacy_link_and_removes_deprecated
 test_foreign_collision_is_kept_when_stdin_closed
 test_stale_cleanup_only_removes_our_links
 test_external_skills_link_but_native_wins
+test_toolkit_link_repo_at_stable_path_is_noop
 test_toolkit_link_and_registry_merge
 test_cursor_mcp_merge_preserves_and_is_idempotent
 test_dry_run_writes_nothing
