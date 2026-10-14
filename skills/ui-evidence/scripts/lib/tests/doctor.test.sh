@@ -121,6 +121,76 @@ test_settings_files_are_parsed_never_executed() {
   echo "PASS: test_settings_files_are_parsed_never_executed"
 }
 
+# Worktree mode: a fake worktree with .env.worktree, fake psql/lsof answers.
+setup_worktree_fakes() {
+  local bin_dir="$1" served_from="$2" db_exists="$3"
+  setup_fake_bins "$bin_dir" "<title>TestApp</title>" 1 1
+  cat > "$bin_dir/docker" <<EOF
+#!/usr/bin/env bash
+case "\$*" in *pg_database*) [ "$db_exists" = "1" ] && echo 1 ;; esac
+exit 0
+EOF
+  cat > "$bin_dir/curl" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "$bin_dir/curl-calls"
+echo "<title>TestApp</title>"
+EOF
+  cat > "$bin_dir/lsof" <<EOF
+#!/usr/bin/env bash
+case "\$*" in *-sTCP:LISTEN*) echo 4242 ;; *) echo "p4242"; echo "n$served_from" ;; esac
+EOF
+  chmod +x "$bin_dir/docker" "$bin_dir/curl" "$bin_dir/lsof"
+}
+
+# run_worktree_doctor <bin> <worktree>: a slot run with a configured database container and API port.
+run_worktree_doctor() {
+  run_doctor "$(new_skill)" "$1" UI_EVIDENCE_APP_TITLE="TestApp" UI_EVIDENCE_DB_CONTAINER=db UI_EVIDENCE_API_PORT=5002 UI_EVIDENCE_WORKTREE="$2"
+}
+
+test_worktree_slot_targets_its_own_ports_and_prints_host() {
+  local bin_dir wt out; bin_dir="$(mktemp -d)"; wt="$(mktemp -d)"
+  echo "WORKTREE_SLOT=2" > "$wt/.env.worktree"
+  setup_worktree_fakes "$bin_dir" "$wt/apps/web" 1
+  out="$(run_worktree_doctor "$bin_dir" "$wt")" || { echo "FAIL: expected a healthy slot, got: $out"; exit 1; }
+  has "localhost:3020/login" "$bin_dir/curl-calls" || { echo "FAIL: expected the slot's web port probed"; exit 1; }
+  has "^nc -z localhost 5022$" "$bin_dir/calls" || { echo "FAIL: expected the slot's API port (configured + 10N) probed, got: $(cat "$bin_dir/calls")"; exit 1; }
+  echo "$out" | has -- "--host http://localhost:3020" || { echo "FAIL: expected the runner host printed, got: $out"; exit 1; }
+  echo "$out" | has "wt_2" || { echo "FAIL: expected the slot database printed, got: $out"; exit 1; }
+  echo "PASS: test_worktree_slot_targets_its_own_ports_and_prints_host"
+}
+
+test_worktree_slot_served_by_another_checkout_is_refused() {
+  local bin_dir wt out; bin_dir="$(mktemp -d)"; wt="$(mktemp -d)"
+  echo "WORKTREE_SLOT=2" > "$wt/.env.worktree"
+  setup_worktree_fakes "$bin_dir" "/somewhere/else/apps/web" 1
+  if out="$(run_worktree_doctor "$bin_dir" "$wt")"; then
+    echo "FAIL: expected a refusal when the slot is served from another checkout"; exit 1
+  fi
+  echo "$out" | has -i "foreign" || { echo "FAIL: expected a foreign-stack reason, got: $out"; exit 1; }
+  echo "PASS: test_worktree_slot_served_by_another_checkout_is_refused"
+}
+
+test_worktree_slot_without_database_fails_with_reason() {
+  local bin_dir wt out; bin_dir="$(mktemp -d)"; wt="$(mktemp -d)"
+  echo "WORKTREE_SLOT=2" > "$wt/.env.worktree"
+  setup_worktree_fakes "$bin_dir" "$wt/apps/web" 0
+  if out="$(run_worktree_doctor "$bin_dir" "$wt")"; then
+    echo "FAIL: expected non-zero when wt_2 does not exist"; exit 1
+  fi
+  echo "$out" | has "wt_2" || { echo "FAIL: expected the missing database named, got: $out"; exit 1; }
+  echo "PASS: test_worktree_slot_without_database_fails_with_reason"
+}
+
+test_worktree_without_claimed_slot_fails_with_reason() {
+  local bin_dir wt out; bin_dir="$(mktemp -d)"; wt="$(mktemp -d)"
+  setup_worktree_fakes "$bin_dir" "$wt" 1
+  if out="$(run_worktree_doctor "$bin_dir" "$wt")"; then
+    echo "FAIL: expected non-zero for a worktree with no .env.worktree"; exit 1
+  fi
+  echo "$out" | has "claim a stack slot" || { echo "FAIL: expected the claim step named, got: $out"; exit 1; }
+  echo "PASS: test_worktree_without_claimed_slot_fails_with_reason"
+}
+
 test_healthy_stack_with_only_a_title_exits_0_and_probes_nothing_unconfigured
 test_foreign_process_on_3000_is_refused_not_double_driven
 test_configured_postgres_not_ready_fails_naming_the_container
@@ -129,4 +199,8 @@ test_configured_api_port_not_open_fails_naming_the_port
 test_missing_app_title_config_fails_with_reason
 test_deployment_env_supplies_settings_and_local_file_and_environment_win
 test_settings_files_are_parsed_never_executed
+test_worktree_slot_targets_its_own_ports_and_prints_host
+test_worktree_slot_served_by_another_checkout_is_refused
+test_worktree_slot_without_database_fails_with_reason
+test_worktree_without_claimed_slot_fails_with_reason
 echo "All doctor tests passed."

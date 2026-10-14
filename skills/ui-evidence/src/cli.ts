@@ -1,6 +1,7 @@
 // CLI: node dist/bin.js <script.json> <run-dir> [--baseline png] [--app-build id]
 //                       [--fixtures id] [--cache manifest.json]
-//                       [--host https://<preview-host> --allow-preview-host] [--allow-writes]
+//                       [--host http://localhost:30N0 | --host https://<preview-host> --allow-preview-host]
+//                       [--allow-writes]
 // Exit 0 = every step passed; 1 = bad usage/script; 2 = at least one step
 // failed or broken (the summary is still written and printed).
 import { createHash } from "node:crypto";
@@ -61,12 +62,13 @@ export async function main(argv: string[], deps: CliDeps): Promise<number> {
   const script = parseUiScript(raw);
   if ("error" in script) return fail(deps, `invalid script: ${script.error}`);
 
-  // A host override is the only time the runner leaves localhost:3000, so it
-  // is also the only time it runs read-only unless --allow-writes says so.
+  // A preview host is the only time the runner leaves this machine, so it is
+  // also the only time it runs read-only unless --allow-writes says so. A
+  // worktree slot host is local seeded data, like localhost:3000.
   const { baseline, host: hostFlag, ...runOpts } = opts;
   const target = resolveHost({ ...(hostFlag !== undefined ? { host: hostFlag } : {}), ...(on.allowPreviewHost ? { allowPreviewHost: true } : {}) });
   if (!target.ok) return fail(deps, target.error);
-  if (hostFlag !== undefined) {
+  if (target.kind === "preview") {
     const guard = guardWrites(script.steps, on.allowWrites === true);
     if (!guard.ok) return fail(deps, guard.error);
   }
