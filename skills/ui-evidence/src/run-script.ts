@@ -10,7 +10,7 @@ import { chromium, type Page } from "playwright";
 import { signIn } from "./login.js";
 import { browserLaunchArgs, isLocalHost, readCredentials, redact } from "./host-guard.js";
 import { runJudge } from "./judge-exec.js";
-import type { UiScript } from "./script-schema.js";
+import { describeStep, type UiScript } from "./script-schema.js";
 import { lintPage, type PageSnapshot } from "./lint-page.js";
 import { desktopChromeUserAgent } from "./user-agent.js";
 import { comparePngs, cropPng, sha256File } from "./pixel-diff.js";
@@ -81,6 +81,17 @@ export async function runScript(script: UiScript, runDir: string, mainBaselineSc
       userAgent: desktopChromeUserAgent(browserVersion),
       recordVideo: { dir: runDir },
     });
+    if (script.localStorage !== undefined) {
+      // Runs before any page script on every load of the host origin, so the
+      // app reads the overrides on its first render and after each navigation.
+      await context.addInitScript(
+        ({ origin, entries }) => {
+          if (location.origin !== origin) return;
+          for (const [key, value] of entries) localStorage.setItem(key, value);
+        },
+        { origin: new URL(host).origin, entries: Object.entries(script.localStorage) },
+      );
+    }
     await context.tracing.start({ screenshots: true, snapshots: true });
     const page = await context.newPage();
     if (script.login !== undefined && creds !== null) {
@@ -97,8 +108,10 @@ export async function runScript(script: UiScript, runDir: string, mainBaselineSc
       i++;
       const shot = path.join(runDir, `${viewport}-${i}-${step.action}.png`);
       const status = await executeStep(page, step, host, repair);
+      // Straight after the check, nothing in between: a drag's evidence is the
+      // transient state right after the drop.
       await page.screenshot({ path: shot }).catch(() => undefined);
-      steps.push({ name: `${viewport}: ${step.action} ${step.target}`, status, screenshot: shot });
+      steps.push({ name: `${viewport}: ${describeStep(step)}`, status, screenshot: shot });
     }
 
     lintFindings.push(...lintPage(await captureSnapshot(page)));
@@ -123,7 +136,7 @@ export async function runScript(script: UiScript, runDir: string, mainBaselineSc
     promptVersion: VISUAL_PROMPT_VERSION,
     model: process.env.AW_VISUAL_MODEL ?? "judge-default",
     appBuild: opts.appBuild ?? null,
-    scenario: hashJson({ route: script.route, role: script.role, steps: script.steps, viewports: script.viewports, ...(script.login !== undefined ? { login: script.login } : {}) }),
+    scenario: hashJson({ route: script.route, role: script.role, steps: script.steps, viewports: script.viewports, ...(script.login !== undefined ? { login: script.login } : {}), ...(script.localStorage !== undefined ? { localStorage: script.localStorage } : {}) }),
     fixtures: opts.fixtures ?? null,
     viewport: script.viewports.join(","),
     browserVersion,

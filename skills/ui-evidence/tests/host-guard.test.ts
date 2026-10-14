@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { browserLaunchArgs, DEFAULT_HOST, findWriteSteps, guardWrites, isLocalHost, isOffOriginNavigation, isSameOriginPath, provenanceFor, readCredentials, redact, resolveHost } from "../src/host-guard.js";
+import { browserLaunchArgs, DEFAULT_HOST, findWriteSteps, guardWrites, isLocalHost, isOffOriginNavigation, isSameOriginPath, provenanceFor, readCredentials, redact, resolveHost, worktreeSlotWebPort } from "../src/host-guard.js";
 import type { ScriptStep } from "../src/script-schema.js";
 
 const goto = (target: string): ScriptStep => ({ action: "goto", target, expectedState: { kind: "url-path", path: "/" } });
@@ -53,6 +53,38 @@ describe("resolveHost", () => {
   });
 });
 
+describe("resolveHost worktree slots", () => {
+  it.each([
+    ["http://localhost:3010", "http://localhost:3010"],
+    ["http://localhost:3020/", "http://localhost:3020"],
+    ["http://localhost:3150", "http://localhost:3150"],
+  ])("accepts slot web port %s as a local run with no opt-in", (host, origin) => {
+    expect(resolveHost({ host })).toEqual({ ok: true, host: origin, kind: "local" });
+  });
+  it.each([
+    ["http://localhost:3000", "not a worktree slot"],
+    ["http://localhost:3015", "not a worktree slot"],
+    ["http://localhost:3160", "not a worktree slot"],
+    ["http://localhost:5022", "not a worktree slot"],
+    ["http://localhost", "not a worktree slot"],
+    ["http://127.0.0.1:3020", "must use localhost"],
+    ["http://localhost:3020/admin", "bare origin"],
+    ["http://localhost:3020/?x=1", "bare origin"],
+    ["http://user:pw@localhost:3020", "credentials"],
+  ])("refuses %s", (host, why) => {
+    const r = resolveHost({ host });
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.error).toContain(why);
+  });
+  it("worktreeSlotWebPort maps slots 1-15 and nothing else", () => {
+    expect(worktreeSlotWebPort(1)).toBe(3010);
+    expect(worktreeSlotWebPort(15)).toBe(3150);
+    expect(worktreeSlotWebPort(0)).toBeNull();
+    expect(worktreeSlotWebPort(16)).toBeNull();
+    expect(worktreeSlotWebPort(1.5)).toBeNull();
+  });
+});
+
 describe("readCredentials", () => {
   it("returns both values from the env", () => {
     expect(readCredentials({ E: "a@b.c", P: "pw" }, "E", "P")).toEqual({ email: "a@b.c", password: "pw" });
@@ -92,6 +124,12 @@ describe("write guard", () => {
     expect(guardWrites(steps, false)).toEqual({ ok: false, error: "refusing write-looking steps without --allow-writes: #2 click submit-form" });
     expect(guardWrites(steps, true)).toEqual({ ok: true });
     expect(guardWrites([click("a")], false)).toEqual({ ok: true });
+  });
+  it("flags every drag, whatever its test ids say", () => {
+    const drag: ScriptStep = { action: "drag", target: "shift-card", to: "day-cell", expectedState: { kind: "testid-visible", testId: "day-cell" } };
+    expect(findWriteSteps([click("a"), drag])).toEqual([{ index: 1, target: "shift-card → day-cell" }]);
+    expect(guardWrites([drag], false)).toEqual({ ok: false, error: "refusing write-looking steps without --allow-writes: #1 drag shift-card → day-cell" });
+    expect(guardWrites([drag], true)).toEqual({ ok: true });
   });
 });
 

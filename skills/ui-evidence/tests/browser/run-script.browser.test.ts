@@ -124,4 +124,22 @@ describe("runScript", () => {
       delete process.env.RS_TEST_PASSWORD;
     }
   }, 150_000);
+
+  it("sets script localStorage before the first page load and labels a drag with its destination", async () => {
+    const dnd: UiScript = {
+      route: "/dnd",
+      role: "manager",
+      viewports: ["desktop"],
+      localStorage: { "dnd-flag": "on" },
+      steps: [
+        { action: "goto", target: "/dnd", expectedState: { kind: "text-visible", text: "Flag on" } },
+        { action: "drag", target: "card", to: "lane", expectedState: { kind: "text-visible", text: "card dropped at 100,100" } },
+      ],
+    };
+    const s = await runScript(dnd, path.join(tmp, "run-dnd"), undefined, { host: fixture.host, appBuild: "b1" });
+    expect(s.steps.map((x) => [x.name, x.status])).toEqual([
+      ["desktop: goto /dnd", "passed"],
+      ["desktop: drag card → lane", "passed"],
+    ]);
+  }, 60_000);
 });

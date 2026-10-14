@@ -2,14 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { assertExpectedState, type AssertablePage } from "../src/expected-state.js";
 
-function fakePage(over: { url?: string; waitFor?: () => Promise<void>; inputValue?: string } = {}): AssertablePage {
+function fakePage(over: { url?: string; waitFor?: () => Promise<void>; inputValue?: string; visibleCount?: number } = {}): AssertablePage {
   const waitFor = over.waitFor ?? (async () => undefined);
   return {
     waitForURL: async (pred) => {
       if (!pred(new URL(over.url ?? "http://localhost:3000/a/b"))) throw new Error("timeout waiting for url");
     },
     getByText: () => ({ locator: () => ({ first: () => ({ waitFor }) }) }),
-    getByTestId: () => ({ waitFor, inputValue: async () => over.inputValue ?? "" }),
+    getByTestId: () => ({ inputValue: async () => over.inputValue ?? "", locator: () => ({ count: async () => over.visibleCount ?? 0, first: () => ({ waitFor }) }) }),
   };
 }
 
@@ -43,5 +43,11 @@ describe("assertExpectedState", () => {
   it("checks input value exactly", async () => {
     await assertExpectedState(fakePage({ inputValue: "hi" }), { kind: "input-value", testId: "t", value: "hi" });
     await expect(assertExpectedState(fakePage({ inputValue: "no" }), { kind: "input-value", testId: "t", value: "hi" })).rejects.toThrow("expected input");
+  });
+  it("testid-absent looks once at visible matches and never waits", async () => {
+    const waitFor = vi.fn().mockResolvedValue(undefined);
+    await assertExpectedState(fakePage({ waitFor, visibleCount: 0 }), { kind: "testid-absent", testId: "t" });
+    expect(waitFor).not.toHaveBeenCalled();
+    await expect(assertExpectedState(fakePage({ visibleCount: 2 }), { kind: "testid-absent", testId: "t" })).rejects.toThrow("expected no visible t, found 2");
   });
 });

@@ -69,6 +69,10 @@ describe("executeStep expected-state robustness", () => {
     expect(await executeStep(page, click("noop", { kind: "text-absent", text: "Schedule" }), fixture.host, never, T)).toBe("failed");
   });
 
+  it("testid-visible passes when a test id repeats, as grid cells do", async () => {
+    expect(await executeStep(page, click("noop", { kind: "testid-visible", testId: "dup" }), fixture.host, never, T)).toBe("passed");
+  });
+
   it("url-path waits for client-side routing that lags the click", async () => {
     expect(await executeStep(page, click("go-b", { kind: "url-path", path: "/b" }), fixture.host, never, T)).toBe("passed");
   });
@@ -187,4 +191,35 @@ describe("executeStep index", () => {
     const step: ScriptStep = { action: "click", target: "row-open", index: 5, expectedState: { kind: "text-visible", text: "Opened 1" } };
     expect(await executeStep(page, step, fixture.host, async () => null, T)).toBe("broken");
   }, 20_000);
+});
+describe("executeStep drag", () => {
+  const drag = (over: Partial<Extract<ScriptStep, { action: "drag" }>> = {}): ScriptStep => ({ action: "drag", target: "card", to: "lane", expectedState: { kind: "testid-absent", testId: "drag-overlay" }, ...over });
+  const dropped = (): Promise<string> => page.locator("#dropped").innerText();
+  beforeEach(async () => {
+    await page.goto(`${fixture.host}/dnd`);
+  });
+
+  it("drives a pointer sensor with a 6px activation distance and drops on the destination center", async () => {
+    expect(await executeStep(page, drag(), fixture.host, never, T)).toBe("passed");
+    expect(await dropped()).toBe("card dropped at 100,100");
+  });
+
+  it("honours grab and drop offsets and holds Alt through the release", async () => {
+    expect(await executeStep(page, drag({ grabOffset: { x: 5, y: 5 }, dropOffset: { x: 30, y: 40 }, holdAlt: true }), fixture.host, never, T)).toBe("passed");
+    expect(await dropped()).toBe("card dropped at 30,40 with Alt");
+  });
+
+  it("testid-absent checks once, right after the drop: a lingering overlay fails the step", async () => {
+    expect(await executeStep(page, drag({ target: "slow-card" }), fixture.host, never, T)).toBe("failed");
+    expect(await dropped()).toBe("slow-card dropped at 100,100");
+  });
+
+  it("marks a missing source or destination broken without asking for repair or pressing the mouse", async () => {
+    const repair: RepairFn = vi.fn(async () => null);
+    expect(await executeStep(page, drag({ target: "no-such-card" }), fixture.host, repair, T)).toBe("broken");
+    expect(await executeStep(page, drag({ to: "no-such-lane" }), fixture.host, repair, T)).toBe("broken");
+    expect(repair).not.toHaveBeenCalled();
+    expect(await page.locator('[data-testid="drag-overlay"]').count()).toBe(0);
+    expect(await dropped()).toBe("");
+  });
 });

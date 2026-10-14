@@ -24,6 +24,7 @@ import {
   type Selector,
 } from "./parity.js";
 import type { DesignFrame, DesignManifest } from "./parity-schema.js";
+import { describeStep } from "./script-schema.js";
 import type { ParitySummary } from "./parity-publish.js";
 import type { Box } from "./pixel-diff.js";
 import { executeStep } from "./step-exec.js";
@@ -78,7 +79,7 @@ async function runFrame(page: Page, m: DesignManifest, f: DesignFrame, host: str
   if (f.waitFor !== undefined) await locate(page, f.waitFor).waitFor({ state: "visible", timeout: m.timeoutMs });
   for (const [i, step] of (f.steps ?? []).entries()) {
     const status = await executeStep(page, step, host, async () => null, Math.min(m.timeoutMs, 10_000));
-    if (status !== "passed") throw new Error(`frame ${f.name}: step ${i + 1} (${step.action} ${step.target}) ${status}`);
+    if (status !== "passed") throw new Error(`frame ${f.name}: step ${i + 1} (${describeStep(step)}) ${status}`);
   }
   for (const v of f.formValues ?? []) await ("testId" in v ? page.getByTestId(v.testId) : page.locator(v.css)).fill(v.value);
   await prepareCapture(page, m);
