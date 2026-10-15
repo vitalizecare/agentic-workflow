@@ -22,14 +22,15 @@ export const LoginSchema = z
   .strict();
 export type Login = z.infer<typeof LoginSchema>;
 
-/** The script runner's login: the web-app's two-step form is the default, so env var names alone are enough. */
+/** The script runner's login: a one-step email + password form is the default, so env var names alone are enough for one. */
 export const ScriptLoginSchema = z
   .object({
     emailEnv: z.string().regex(ENV_NAME),
     passwordEnv: z.string().regex(ENV_NAME),
-    emailSelector: z.string().min(1).default('input[name="contact"]'),
-    passwordSelector: z.string().min(1).default('input[name="password"]'),
-    nextSelector: z.string().default('button[type="submit"]'),
+    emailSelector: z.string().min(1).default('input[type="email"]'),
+    passwordSelector: z.string().min(1).default('input[type="password"]'),
+    /** Clicked after the email (two-step forms) — optional. */
+    nextSelector: z.string().optional(),
     submitSelector: z.string().min(1).default('button[type="submit"]'),
     loginPath: z.string().default("/login"),
   })

@@ -56,7 +56,7 @@ Every skill starts by reading this file and following it. Run **Session Close** 
 > | `/prismStatus` | Health check for prism-mcp |
 > | `/specToProvenPR` | Approved spec → proven, review-clean PRs, one shippable stage at a time |
 > | `/judge` | Tune, inspect, and undo `judge` decisions in-session |
-> | `/ui-evidence` | Playwright UI evidence for a web-app PR, published ask-first |
+> | `/ui-evidence` | Playwright UI evidence for a web app PR, published ask-first |
 > | `/bugFixOrchestrator` | Bug ticket → rootCause → implementers → proven, judge-checked resolution |
 > | `/new-package` | Scaffold a C# package that passes every check, with one red test |
 > | `/new-slice` | Add one C# use case (slice) to a package, red first |

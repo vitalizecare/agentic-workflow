@@ -35,7 +35,7 @@ public sealed class BrowserFixture : IAsyncLifetime
 
     internal async Task<IBrowserSession> OpenAsync(string? recordDirectory = null, string? origin = null)
     {
-        var host = HostGuard.Resolve(origin ?? Site.Origin, allowPreviewHost: false).Value;
+        var host = HostGuard.Resolve(origin ?? Site.Origin, allowPreviewHost: false, previewHostPattern: null).Value;
         var session = await Browser.OpenAsync(new BrowserSessionOptions(host, new ViewportSize(1280, 800), recordDirectory, UserAgentOverride: null), CancellationToken.None);
         Assert.True(session.IsSuccess, session.IsError ? session.Error.Message : null);
         return session.Value;

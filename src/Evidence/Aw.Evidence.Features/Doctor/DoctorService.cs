@@ -1,3 +1,4 @@
+using System.Globalization;
 using Aw.Evidence.Core.Guard;
 using Aw.Evidence.Core.Settings;
 using Aw.Evidence.Core.Stack;
@@ -7,8 +8,8 @@ using Aw.Kernel.Services;
 namespace Aw.Evidence.Features.Doctor;
 
 /// <summary>
-/// Read-only stack health. The app's page title is deployment-specific, so it comes from the settings; a page on
-/// :3000 with another title is a foreign process, never driven.
+/// Read-only stack health. The app's page title and API port are deployment-specific, so they come from the settings
+/// (no port configured skips that check); a page on :3000 with another title is a foreign process, never driven.
 /// </summary>
 internal sealed class DoctorService(IStackProbe probe, IEvidenceSettings settings) : IService<DoctorRequest, DoctorResponse>
 {
@@ -33,12 +34,12 @@ internal sealed class DoctorService(IStackProbe probe, IEvidenceSettings setting
 
         if ((await probe.DatabaseReadyAsync(cancellationToken).ConfigureAwait(false)).IsError)
         {
-            failures.Add("the database is not ready");   // the container behind it is the probe adapter's detail
+            failures.Add("the database is not ready");   // the container behind it (or none) is the probe adapter's detail
         }
 
-        if ((await probe.PortOpenAsync("localhost", 5002, cancellationToken).ConfigureAwait(false)).IsError)
+        if (settings.ApiPort is { } port && (await probe.PortOpenAsync("localhost", port, cancellationToken).ConfigureAwait(false)).IsError)
         {
-            failures.Add("api-server (:5002) is not accepting connections");
+            failures.Add(string.Create(CultureInfo.InvariantCulture, $"api-server (:{port}) is not accepting connections"));
         }
 
         return new DoctorResponse(failures.Count == 0, failures);

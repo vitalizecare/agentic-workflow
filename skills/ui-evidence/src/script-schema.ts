@@ -50,7 +50,9 @@ export type PlanningMeta = z.infer<typeof PlanningMetaSchema>;
 
 export const UiScriptSchema = z.object({
   route: z.string(),
-  role: z.enum(["manager", "staff", "central-staffer", "super-admin"]),
+  // The app role the script signs in as (the app's own names, e.g. "admin");
+  // recorded in the summary, not interpreted.
+  role: z.string().regex(/^[a-z][a-z0-9-]*$/),
   /** Env-var sign-in run before the first step (credentials never live in the script). */
   login: ScriptLoginSchema.optional(),
   steps: z.array(ScriptStepSchema).min(1),

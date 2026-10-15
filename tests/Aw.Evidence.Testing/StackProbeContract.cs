@@ -20,9 +20,9 @@ public abstract class StackProbeContract
     [Fact]
     public async Task A_page_title_reads_back()
     {
-        var stack = await ArrangeAsync(new StackState("Vitalize QA", DatabaseReady: true, PortOpen: true));
+        var stack = await ArrangeAsync(new StackState("Example QA", DatabaseReady: true, PortOpen: true));
 
-        Expect.That((await stack.Probe.PageTitleAsync(stack.LoginPage, CancellationToken.None)).Value == "Vitalize QA", "the title reads back");
+        Expect.That((await stack.Probe.PageTitleAsync(stack.LoginPage, CancellationToken.None)).Value == "Example QA", "the title reads back");
     }
 
     /// <summary>A page without a title is a probe failure.</summary>

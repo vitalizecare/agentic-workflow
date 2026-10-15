@@ -1,12 +1,14 @@
 ---
 name: ui-evidence
-description: Generate Playwright-based UI evidence for a web-app PR — plan with qa-runner, run headless with no model, repair broken selectors via judge, lint for sloppiness, and publish (ask-first) to Linear and a PR comment. Local stack only, never dev/prod.
+description: Generate Playwright-based UI evidence for a web app PR — plan with qa-runner, run headless with no model, repair broken selectors via judge, lint for sloppiness, and publish (ask-first) to Linear and a PR comment. Local stack only, never dev/prod.
 ---
 
 # UI evidence
 
+If `deployment.md` sits next to this file, read it first: it holds this deployment's conventions (preview hosts, roles, login form, where credentials come from). Deployment-specific values are settings, never code ([Configuration](#configuration)).
+
 1. Doctor the stack: `bash scripts/doctor.sh`. Refuse to proceed if unhealthy or foreign (RF-1).
-2. **Spawn a subagent** — the `qa-runner` custom agent (installed per provider) — with the PR diff and `verify-web-app`'s route map to write a script (`script-schema.ts`'s shape).
+2. **Spawn a subagent** — the `qa-runner` custom agent (installed per provider) — with the PR diff and the app's route map (if the repo documents one) to write a script (`script-schema.ts`'s shape).
 3. `with_stack_lock_and_heavy_job_lock 120 node dist/bin.js <script.json> <run-dir> [--baseline main.png] [--app-build <sha>] [--fixtures <id>] [--cache <manifest.json>]` (exit 0 all steps passed, 2 a step failed/broken, 1 bad usage or invalid script; the summary JSON is printed and written to `<run-dir>/summary.json`, including `appBuild` — pass `--app-build $(git rev-parse HEAD)` so the run is tied to a commit).
 4. Check DB provenance (`checkDbProvenance`) before deciding whether Linear upload is even offered.
 5. Visual verdict, cheapest first (`visual-gate.ts`): (a) deterministic pixel compare of the last passed screenshot against the approved main baseline — identical pixels and all steps passed ⇒ `unchanged`, **no model call**; (b) verdict cache (`verdict-cache.ts`) keyed on the actual after+baseline image hashes plus prompt/model version, app build, script, fixtures, viewport and browser version — a hit reuses the prior critique and is recorded as a cache hit; (c) otherwise one `judge visual-critique` call on the cropped changed region (image-capable CLI only — Jev is text-only and never sees images). Any failure, timeout, or out-of-enum result is `unchecked` — never a default `looks-right`. A run with a failed/broken step always gets a critique. The browser run and every step check always execute; a cached or `unchanged` visual never stands in for a behavior check.
@@ -14,7 +16,7 @@ description: Generate Playwright-based UI evidence for a web-app PR — plan wit
 
 ## Host override (guard rails)
 
-`localhost:3000` stays the default. `--host https://pr-<n>.vitalize.build --allow-preview-host` runs against a PR living preview and nothing else: the host must be exactly `pr-<digits>.vitalize.build` over https with no port, path or credentials, so dev, staging and prod hosts are refused. `goto` targets must be paths on that host (one leading `/`; `@evil.com/x`, `//evil.com` and backslashes are refused, and `performAction` re-checks), and the parity browser aborts any navigation to another origin. A host override is read-only on a best-effort basis: click steps (and `goto` paths) whose words read like save/submit/update/delete/create/confirm/publish/send/apply/approve/post/add/invite/archive/cancel/reset/assign/import/upload/enable/disable/complete/sync/logout and similar — including `saveBtn`/`delete-button` forms — are refused unless `--allow-writes`. The check is a keyword heuristic on test ids: it cannot see what an opaque id does, and a `fill` into an autosaving input is not covered, so only point it at pages whose controls you know. Selector repair can click a model-chosen element; keep host-override scripts to stable test ids. Credentials come only from environment variables (`doppler run --project vitalize --config dev_preview -- …`); they are never printed, and error text is scrubbed of them. A preview is a scrubbed customer extract: `parity` records provenance `scrubbed` (an explicit `--db-provenance unknown` stays `unknown`). On the original script runner a non-local host is recorded in `summary.json` (`host`), and `publishEvidence` treats any non-local host as `unknown` whatever the caller passes, so those runs stay local; use `parity` for scrubbed-data uploads to Linear.
+`localhost:3000` stays the default. `--host https://<preview-host> --allow-preview-host` runs against a PR living preview and nothing else: the hostname must fully match `UI_EVIDENCE_PREVIEW_HOST_PATTERN` (a regex such as `pr-[0-9]+\.preview\.example\.com`; write it so dev, staging and prod hosts never match), over https with no port, path or credentials. With no pattern configured every non-local host is refused. `goto` targets must be paths on that host (one leading `/`; `@evil.com/x`, `//evil.com` and backslashes are refused, and `performAction` re-checks), and the parity browser aborts any navigation to another origin. A host override is read-only on a best-effort basis: click steps (and `goto` paths) whose words read like save/submit/update/delete/create/confirm/publish/send/apply/approve/post/add/invite/archive/cancel/reset/assign/import/upload/enable/disable/complete/sync/logout and similar — including `saveBtn`/`delete-button` forms — are refused unless `--allow-writes`. The check is a keyword heuristic on test ids: it cannot see what an opaque id does, and a `fill` into an autosaving input is not covered, so only point it at pages whose controls you know. Selector repair can click a model-chosen element; keep host-override scripts to stable test ids. Credentials come only from environment variables (e.g. run under your secrets manager's `run --` wrapper); they are never printed, and error text is scrubbed of them. A preview is a scrubbed customer extract: `parity` records provenance `scrubbed` (an explicit `--db-provenance unknown` stays `unknown`). On the original script runner a non-local host is recorded in `summary.json` (`host`), and `publishEvidence` treats any non-local host as `unknown` whatever the caller passes, so those runs stay local; use `parity` for scrubbed-data uploads to Linear.
 
 ### Step actions and login for the plain runner
 
@@ -22,7 +24,7 @@ Script steps are `goto`, `click`, `fill`, `expect-visible` and `scroll`; each as
 
 A step may carry an optional `index` (non-negative integer; `click`, `fill` and `scroll` only, rejected at parse time on `goto` and `expect-visible`) to pick the nth match (0-based) of a repeated `data-testid`, e.g. `{"action":"click","target":"timeline-window-row-open-list","index":1,...}`. Without `index` the locator stays strict: several matches fail the action and go to selector repair as before; with `index` a broken target is repaired as before. `index` is part of the step, so it is in the scenario hash.
 
-An optional script-level `login` signs in before the first step of each viewport, on previews that need a session: `{"emailEnv": "ADMIN_EMAIL", "passwordEnv": "ADMIN_PASSWORD"}` plus optional `emailSelector`, `passwordSelector`, `nextSelector`, `submitSelector` (defaults fit the web-app's two-step form: `input[name="contact"]`, `input[name="password"]`, `button[type="submit"]` for both buttons) and `loginPath` (default `/login`). It is strict like the parity login: env var names must be `UPPER_SNAKE`, unknown keys fail the parse. Credentials come only from the environment (run under `doppler run --project vitalize --config dev_preview -- …`); a missing variable stops the run before a browser starts, values never reach `summary.json` or logs, and error text is scrubbed of them. Only the env var names and selectors enter the scenario hash. The shared implementation lives in `login.ts`; without `login` nothing changes.
+An optional script-level `login` signs in before the first step of each viewport, on previews that need a session: `{"emailEnv": "ADMIN_EMAIL", "passwordEnv": "ADMIN_PASSWORD"}` plus optional `emailSelector`, `passwordSelector`, `nextSelector`, `submitSelector` (defaults fit a one-step email + password form: `input[type="email"]`, `input[type="password"]`, `button[type="submit"]`; set `nextSelector` for a two-step form) and `loginPath` (default `/login`). It is strict like the parity login: env var names must be `UPPER_SNAKE`, unknown keys fail the parse. Credentials come only from the environment; a missing variable stops the run before a browser starts, values never reach `summary.json` or logs, and error text is scrubbed of them. Only the env var names and selectors enter the scenario hash. The shared implementation lives in `login.ts`; without `login` nothing changes.
 
 
 ## Design-parity mode (Figma pixel diff)
@@ -31,7 +33,7 @@ Compares the implementation with a design export instead of with a main-branch s
 
 ```bash
 with_stack_lock_and_heavy_job_lock 120 node dist/bin.js parity <manifest.json> <run-dir> \
-  [--host https://pr-<n>.vitalize.build --allow-preview-host] [--allow-writes] [--app-build $(git rev-parse HEAD)] [--db-provenance seeded|unknown]
+  [--host https://<preview-host> --allow-preview-host] [--allow-writes] [--app-build $(git rev-parse HEAD)] [--db-provenance seeded|unknown]
 ```
 
 Exit 0 all geometry checks passed, 1 bad usage/manifest/guard, 2 a geometry check failed, 4 the run itself errored (anchor missing, step failed, region outside the viewport). `<run-dir>/parity.json` is the summary; it is deleted at the start of every run, so a failed run never leaves an earlier summary for `parity-plan` to publish.
@@ -62,19 +64,32 @@ Each run writes `summary.json` with every model invocation (planning, selector-r
 
 ## Configuration
 
-These values are deployment-specific and never hardcoded. Set them as
-environment variables, or in an uncommitted `.ui-evidence.local.env`
-(next to this SKILL.md — see `.gitignore`) that `doctor.sh` sources.
+Deployment-specific values are settings, never code. Each is read from, highest precedence first:
+
+1. the environment;
+2. a local, uncommitted env file: the one `UI_EVIDENCE_CONFIG` names, else `.ui-evidence.local.env` next to this SKILL.md (gitignored);
+3. `deployment.env` next to this SKILL.md: a deployment's committed defaults. It is absent here; a fork that adapts the toolkit to one app commits its own (with a `deployment.md` for the conventions settings can't express), so syncing from upstream never conflicts.
+
+The files are `NAME=value` lines (`#` comments, optional `export ` and quotes); they are parsed, never sourced. `doctor.sh` and `dist/bin.js` read them the same way. Unset settings fail closed.
 
 - `UI_EVIDENCE_APP_TITLE` — the app's `<title>` text, used by `doctor.sh` to
   confirm `:3000` is this app and not a foreign process. Required; `doctor.sh`
-  fails with a clear message if it's unset and not found in the local config.
+  fails with a clear message if it's unset.
+- `UI_EVIDENCE_PREVIEW_HOST_PATTERN` — a regex the whole hostname of a `--host`
+  preview must match (see [Host override](#host-override-guard-rails)). Unset: no
+  preview host is accepted.
+- `UI_EVIDENCE_DB_CONTAINER` / `UI_EVIDENCE_DB_USER` — the Docker container running the
+  local Postgres and its user (default `postgres`). `doctor.sh` runs `pg_isready` there,
+  and the provenance query runs `psql` there. Unset: `doctor.sh` skips the database check.
+- `UI_EVIDENCE_API_PORT` — a localhost port (an API server) `doctor.sh` must reach. Unset: skipped.
+- `UI_EVIDENCE_SEED_TABLE` — the `[schema.]table` with an `email` column that
+  `checkDbProvenance` reads. Unset: provenance is `unknown` (evidence stays local).
 - `UI_EVIDENCE_SEED_DOMAINS` — comma-separated list of email domains that
   count as seed/synthetic data for `checkDbProvenance`. Default: `example.com`.
 - `UI_EVIDENCE_SEED_EMAIL_PATTERN` — the SQL `LIKE` pattern used to find a
-  seed marker row in `public.profile`. Default: a generic example.com pattern.
+  seed marker row in the seed table. Default: a generic example.com pattern.
   Unconfigured, both defaults only match fictional example.com addresses, so
   provenance fails closed ("unknown") against any real database.
 - `UI_EVIDENCE_USER_AGENT` — the browser's user agent. Default: desktop Chrome at the
   bundled Chromium's version, because headless Chromium's own UA says "HeadlessChrome"
-  and apps that gate on browser support (Vitalize's unsupported-browser page) block it.
+  and apps that gate on browser support (an "unsupported browser" page) block it.

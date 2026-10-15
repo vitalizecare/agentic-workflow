@@ -25,7 +25,7 @@ public sealed class ProvenanceCheckTests
     {
         var finding = await Check(new FakeProvenanceQuery { Emails = { "nurse@example.com" } });
 
-        Assert.Equal(new ProvenanceFinding(DbProvenance.Unknown, "no seed row found in public.profile"), finding);
+        Assert.Equal(new ProvenanceFinding(DbProvenance.Unknown, "no seed row found in the seed table"), finding);
     }
 
     [Fact, Trait("Lane", "unit")]

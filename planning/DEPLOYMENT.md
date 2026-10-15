@@ -48,7 +48,7 @@ Full setup from scratch:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/vitalizecare/agentic-workflow.git ~/repos/agentic-workflow
+git clone https://github.com/jthorare/agentic-workflow.git ~/repos/agentic-workflow
 cd ~/repos/agentic-workflow
 
 # 2. Run the setup script (detects installed provider CLIs; or pass --providers)

@@ -1,11 +1,12 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Aw.Kernel;
 
 namespace Aw.Evidence.Core.Scripts;
 
 /// <summary>Reads a UI script document and checks its rules.</summary>
-public static class ScriptReader
+public static partial class ScriptReader
 {
     /// <summary>Parses and validates a script.</summary>
     /// <param name="utf8Json">The script file's bytes.</param>
@@ -14,13 +15,13 @@ public static class ScriptReader
     public static Result<UiScript> Read(ReadOnlySpan<byte> utf8Json, JsonSerializerOptions options) =>
         JsonInput.Read<UiScript>(utf8Json, options, EvidenceErrors.ScriptInvalid).Bind(Validate);
 
-    /// <summary>Checks a script's rules: at least one step and viewport, known enum values, well-formed expectations, non-negative usage.</summary>
+    /// <summary>Checks a script's rules: a kebab-case role, at least one step and viewport, known enum values, well-formed expectations, non-negative usage.</summary>
     /// <param name="script">The script.</param>
     /// <returns>The script, or AW-EVIDENCE-002 naming every problem.</returns>
     public static Result<UiScript> Validate(UiScript script)
     {
         var problems = new Problems();
-        problems.AddIf(!Enum.IsDefined(script.Role), "role is not a known role");
+        problems.AddIf(script.Role is null || !RoleName.IsMatch(script.Role), "role must be a lower-case kebab-case name (the app's own role, e.g. \"admin\")");
         problems.AddIf(script.Steps.Count == 0, "steps needs at least one step");
         problems.AddIf(script.Viewports.Count == 0, "viewports needs at least one viewport");
         problems.AddIf(script.Viewports.Any(static v => !Enum.IsDefined(v)), "viewports holds an unknown viewport");
@@ -52,4 +53,8 @@ public static class ScriptReader
             problems.Add($"{at}: {problem}");
         }
     }
+
+    // The app's own role names differ per deployment, so any lower-case kebab-case name is a role.
+    [GeneratedRegex("^[a-z][a-z0-9-]*\\z", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
+    private static partial Regex RoleName { get; }
 }

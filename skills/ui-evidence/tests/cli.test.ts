@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { main, realDeps, type CliDeps } from "../src/cli.js";
 import type { RunSummary } from "../src/publish.js";
+
+// Preview hosts are deployment config; these tests use a fictional one.
+beforeEach(() => vi.stubEnv("UI_EVIDENCE_PREVIEW_HOST_PATTERN", "pr-[0-9]+\\.preview\\.example\\.com"));
+afterEach(() => vi.unstubAllEnvs());
 
 const scriptJson = JSON.stringify({ route: "/", role: "staff", viewports: ["desktop"], steps: [{ action: "goto", target: "/", expectedState: { kind: "url-path", path: "/" } }] });
 const summary = (status: "passed" | "failed"): RunSummary => ({ steps: [{ name: "s", status, screenshot: "x.png" }], visual: "unchanged", visualReasons: [], lintFindings: [] });
@@ -43,23 +47,23 @@ describe("cli main", () => {
     it("passes a preview host to the runner only with --allow-preview-host", async () => {
       const run = vi.fn().mockResolvedValue(summary("passed"));
       const { d } = deps({ run });
-      expect(await main(["s.json", "r", "--host", "https://pr-5.vitalize.build", "--allow-preview-host"], d)).toBe(0);
-      expect(run).toHaveBeenCalledWith(expect.anything(), "r", undefined, expect.objectContaining({ host: "https://pr-5.vitalize.build" }));
+      expect(await main(["s.json", "r", "--host", "https://pr-5.preview.example.com", "--allow-preview-host"], d)).toBe(0);
+      expect(run).toHaveBeenCalledWith(expect.anything(), "r", undefined, expect.objectContaining({ host: "https://pr-5.preview.example.com" }));
     });
 
     it("refuses prod/dev hosts and a missing opt-in before running", async () => {
       const run = vi.fn();
-      for (const argv of [["s.json", "r", "--host", "https://app.vitalize.build", "--allow-preview-host"], ["s.json", "r", "--host", "https://pr-5.vitalize.build"]]) {
+      for (const argv of [["s.json", "r", "--host", "https://app.preview.example.com", "--allow-preview-host"], ["s.json", "r", "--host", "https://pr-5.preview.example.com"]]) {
         const { d, err } = deps({ run });
         expect(await main(argv, d)).toBe(1);
-        expect(err[0]).toMatch(/not a pr-<n>\.vitalize\.build preview host|needs --allow-preview-host/);
+        expect(err[0]).toMatch(/is not a preview host|needs --allow-preview-host/);
       }
       expect(run).not.toHaveBeenCalled();
     });
 
     it("is read-only on a host override unless --allow-writes; localhost keeps its steps", async () => {
       const run = vi.fn().mockResolvedValue(summary("passed"));
-      const host = ["--host", "https://pr-5.vitalize.build", "--allow-preview-host"];
+      const host = ["--host", "https://pr-5.preview.example.com", "--allow-preview-host"];
       const refused = deps({ run, readFile: () => clickScript("save-button") });
       expect(await main(["s.json", "r", ...host], refused.d)).toBe(1);
       expect(refused.err[0]).toContain("--allow-writes");

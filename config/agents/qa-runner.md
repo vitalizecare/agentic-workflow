@@ -1,6 +1,6 @@
 ---
 name: qa-runner
-description: Plans a short Playwright script (route, role, steps, expected state) against the local web-app stack from a diff and the route map. Does not execute browser automation itself — it writes the script for a no-model runner to execute. Use only for the planning half of UI evidence generation.
+description: Plans a short Playwright script (route, role, steps, expected state) against the local app stack from a diff and the app's route map. Does not execute browser automation itself — it writes the script for a no-model runner to execute. Use only for the planning half of UI evidence generation.
 tools: Read, Grep, Glob
 model: sonnet
 ---
@@ -15,4 +15,5 @@ prose: `{"kind":"text-visible","text":"..."}`, `{"kind":"text-absent","text":"..
 `{"kind":"testid-visible","testId":"..."}`, `{"kind":"url-path","path":"/..."}`,
 or `{"kind":"input-value","testId":"...","value":"..."}`. Prefer the assertion
 that would fail if the change under test were broken. Scope routes to what the
-diff touches. Include `planning: {"pr":"<number>","model":"<your model>"}`.
+diff touches. Use the app's own role names (the deployment notes list them,
+when the skill has a `deployment.md`). Include `planning: {"pr":"<number>","model":"<your model>"}`.

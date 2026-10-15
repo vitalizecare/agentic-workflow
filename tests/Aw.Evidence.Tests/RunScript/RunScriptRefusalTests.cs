@@ -23,7 +23,7 @@ public sealed class RunScriptRefusalTests
     {
         var harness = WithSave();
 
-        var result = await harness.Run(A.RunScriptRequest().OnHost("https://pr-12.vitalize.build").Build());
+        var result = await harness.Run(A.RunScriptRequest().OnHost("https://pr-12.preview.example.com").Build());
 
         Assert.Equal(EvidenceErrors.StepsRefused.Code, result.Error.Code);
         Assert.Empty(harness.Locks.Events);
@@ -36,9 +36,9 @@ public sealed class RunScriptRefusalTests
         var harness = WithSave();
         _ = harness.Page.TestIds.Add("save-button");
 
-        var result = await harness.Run(A.RunScriptRequest().OnHost("https://pr-12.vitalize.build", allowWrites: true).Build());
+        var result = await harness.Run(A.RunScriptRequest().OnHost("https://pr-12.preview.example.com", allowWrites: true).Build());
 
-        Assert.Equal("https://pr-12.vitalize.build", result.Value.Summary.Host);
+        Assert.Equal("https://pr-12.preview.example.com", result.Value.Summary.Host);
     }
 
     [Fact, Trait("Lane", "unit")]
@@ -49,7 +49,7 @@ public sealed class RunScriptRefusalTests
         harness.Page.Candidates.Add(new Candidate(0, "button", "Delete account", TestId.From("delete-account"), "Delete account"));
         harness.Page.OnClick["candidate:0"] = static page => page.Texts.Add("Done");
 
-        var result = await harness.Run(A.RunScriptRequest().OnHost("https://pr-12.vitalize.build").Build());
+        var result = await harness.Run(A.RunScriptRequest().OnHost("https://pr-12.preview.example.com").Build());
 
         Assert.Equal(StepStatus.Broken, Assert.Single(result.Value.Summary.Steps).Status);
         Assert.DoesNotContain(harness.Browser.Sessions.SelectMany(static s => s.Calls), static c => c.StartsWith("click candidate", StringComparison.Ordinal));
@@ -73,7 +73,7 @@ public sealed class RunScriptRefusalTests
     {
         var harness = WithSave();
 
-        var result = await harness.Run(A.RunScriptRequest().OnHost("https://app.vitalize.build").Build());
+        var result = await harness.Run(A.RunScriptRequest().OnHost("https://app.preview.example.com").Build());
 
         Assert.Equal(EvidenceErrors.HostRefused.Code, result.Error.Code);
         Assert.Empty(harness.Locks.Events);

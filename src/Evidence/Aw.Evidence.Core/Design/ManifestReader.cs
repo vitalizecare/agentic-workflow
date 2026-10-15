@@ -27,7 +27,7 @@ public static class ManifestReader
             ManifestRules.CheckFrame(frame, problems);
             foreach (var step in frame.Steps)
             {
-                var checkedStep = ScriptReader.Validate(new UiScript("/", UserRole.Staff, [step], [ViewportKind.Desktop]));
+                var checkedStep = ScriptReader.Validate(new UiScript("/", "staff", [step], [ViewportKind.Desktop]));
                 problems.AddIf(checkedStep.IsError, $"frame \"{frame.Name}\": {(checkedStep.IsError ? checkedStep.Error.Message : string.Empty)}");
             }
         }

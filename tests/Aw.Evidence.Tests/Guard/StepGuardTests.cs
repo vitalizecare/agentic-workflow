@@ -7,7 +7,7 @@ namespace Aw.Evidence.Tests.Guard;
 
 public sealed class StepGuardTests
 {
-    private static readonly ResolvedHost _preview = new("https://pr-9.vitalize.build", HostKind.Preview);
+    private static readonly ResolvedHost _preview = new("https://pr-9.preview.example.com", HostKind.Preview);
     private static readonly ResolvedHost _local = new("http://localhost:4000", HostKind.Local);
 
     private static ScriptStep Click(string target) => ScriptBuilder.Click(target);

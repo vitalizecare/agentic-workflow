@@ -14,7 +14,7 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/vitalizecare/agentic-workflow.git ~/repos/agentic-workflow
+git clone https://github.com/jthorare/agentic-workflow.git ~/repos/agentic-workflow
 cd ~/repos/agentic-workflow
 ```
 

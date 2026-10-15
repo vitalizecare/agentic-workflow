@@ -65,6 +65,7 @@ internal sealed class CliWorkspace : IDisposable
             _ = start.Environment.Remove(name);
         }
 
+        start.Environment["UI_EVIDENCE_PREVIEW_HOST_PATTERN"] = "pr-[0-9]+\\.preview\\.example\\.com";   // a fictional preview domain
         _ = start.Environment.Remove("AW_HEAVY_LOCK_HELD");
         _ = start.Environment.Remove("AW_VISUAL_MODEL");
         start.Environment["AW_STATE_DIR"] = Path.Combine(Root, "state");

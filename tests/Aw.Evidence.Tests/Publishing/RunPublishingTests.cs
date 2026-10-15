@@ -67,7 +67,7 @@ public sealed class RunPublishingTests
     }
 
     [Theory, Trait("Lane", "unit")]
-    [InlineData("https://pr-4.vitalize.build", DbProvenance.Seeded, true)]
+    [InlineData("https://pr-4.preview.example.com", DbProvenance.Seeded, true)]
     [InlineData("http://localhost:3000", DbProvenance.Unknown, true)]
     [InlineData("http://localhost:3000", DbProvenance.Seeded, false)]
     public void Unknown_provenance_keeps_the_evidence_local_whatever_the_answer(string host, DbProvenance claimed, bool staysLocal)

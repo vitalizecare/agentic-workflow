@@ -15,6 +15,15 @@ public interface IEvidenceSettings
     /// <summary>The model label in the verdict-cache key.</summary>
     public string VisualModel { get; }
 
+    /// <summary>
+    /// The regex a preview --host's whole hostname must match (deployment-specific, e.g. per-PR preview hosts), or null
+    /// when none is configured: then every non-loopback host is refused.
+    /// </summary>
+    public string? PreviewHostPattern { get; }
+
+    /// <summary>A localhost port (an API server) doctor must reach, or null to skip that check.</summary>
+    public int? ApiPort { get; }
+
     /// <summary>What counts as seed data in the local database (fails closed when unconfigured).</summary>
     public SeedPolicy SeedPolicy { get; }
 

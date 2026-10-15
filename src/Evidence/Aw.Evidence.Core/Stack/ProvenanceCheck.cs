@@ -20,7 +20,7 @@ public static class ProvenanceCheck
 
         if (seeds.Value.Count == 0)
         {
-            return new(DbProvenance.Unknown, "no seed row found in public.profile");
+            return new(DbProvenance.Unknown, "no seed row found in the seed table");
         }
 
         var all = await query.AllEmailsAsync(cancellationToken).ConfigureAwait(false);

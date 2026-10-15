@@ -6,6 +6,7 @@ using Aw.Evidence.Core.Ids;
 using Aw.Evidence.Core.Locks;
 using Aw.Evidence.Core.Runs;
 using Aw.Evidence.Core.Scripts;
+using Aw.Evidence.Core.Settings;
 using Aw.Kernel;
 using Aw.Kernel.Services;
 
@@ -17,13 +18,13 @@ namespace Aw.Evidence.Features.Parity;
 /// locks for the browser run. parity.json is deleted first, so a failed run leaves none behind. A run failure's
 /// message never carries a credential.
 /// </summary>
-internal sealed class ParityService(ParityFilesAccess files, IMachineLocks locks, ISecretsSource secrets, ParityRun run)
+internal sealed class ParityService(ParityFilesAccess files, IMachineLocks locks, ISecretsSource secrets, ParityRun run, IEvidenceSettings settings)
     : IService<ParityRequest, ParityResponse>
 {
     public async ValueTask<Result<ParityResponse>> Handle(ParityRequest request, CancellationToken cancellationToken)
     {
         var manifest = await files.ReadManifestAsync(request.ManifestPath, cancellationToken).ConfigureAwait(false);
-        var host = manifest.Bind(_ => HostGuard.Resolve(request.Host, request.AllowPreviewHost));
+        var host = manifest.Bind(_ => HostGuard.Resolve(request.Host, request.AllowPreviewHost, settings.PreviewHostPattern));
         var vetted = host.Bind(_ => StepGuard.ForParity(StepsOf(manifest.Value), request.AllowWrites));
         var credentials = vetted.Bind(_ => ReadCredentials(manifest.Value));
         if (credentials.IsError)

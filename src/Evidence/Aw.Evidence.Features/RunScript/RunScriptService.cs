@@ -3,6 +3,7 @@ using Aw.Evidence.Core.Guard;
 using Aw.Evidence.Core.Ids;
 using Aw.Evidence.Core.Locks;
 using Aw.Evidence.Core.Runs;
+using Aw.Evidence.Core.Settings;
 using Aw.Evidence.Core.Usage;
 using Aw.Kernel;
 using Aw.Kernel.Ids;
@@ -15,13 +16,13 @@ namespace Aw.Evidence.Features.RunScript;
 /// lock), then holds the QA-stack and heavy-job locks for the whole browser run, deletes an earlier summary.json, writes
 /// the new one and releases the locks on every path.
 /// </summary>
-internal sealed class RunScriptService(ScriptFiles files, IMachineLocks locks, ScriptRun run, RunVerdict verdict, TimeProvider clock, IIdGenerator ids)
+internal sealed class RunScriptService(ScriptFiles files, IMachineLocks locks, ScriptRun run, RunVerdict verdict, TimeProvider clock, IIdGenerator ids, IEvidenceSettings settings)
     : IService<RunScriptRequest, RunScriptResponse>
 {
     public async ValueTask<Result<RunScriptResponse>> Handle(RunScriptRequest request, CancellationToken cancellationToken)
     {
         var loaded = await files.ReadAsync(request.ScriptPath, cancellationToken).ConfigureAwait(false);
-        var host = loaded.Bind(_ => HostGuard.Resolve(request.Host, request.AllowPreviewHost));
+        var host = loaded.Bind(_ => HostGuard.Resolve(request.Host, request.AllowPreviewHost, settings.PreviewHostPattern));
         var vetted = host.Bind(h => StepGuard.ForRun(loaded.Value.Script.Steps, h, request.AllowWrites));
         if (vetted.IsError)
         {

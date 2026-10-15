@@ -59,8 +59,8 @@ aw_confirm() {
   [ "$answer" = "y" ]
 }
 
-# True if a symlink target string points into this toolkit checkout (or a
-# previous install of it under the legacy repo name).
+# True if a symlink target string points into this toolkit checkout (or
+# another checkout of it, including the legacy Vitalize repo name).
 aw_is_ours() {
   local link_target="$1"
   local toolkit_canon

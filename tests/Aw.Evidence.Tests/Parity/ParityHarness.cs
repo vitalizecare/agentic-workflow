@@ -41,7 +41,7 @@ internal sealed class ParityHarness
 
     public Dictionary<string, string> Secrets { get; } = new(StringComparer.Ordinal);
 
-    public FakeEvidenceSettings Settings { get; } = new();
+    public FakeEvidenceSettings Settings { get; } = new() { PreviewHostPattern = FakeEvidenceSettings.ExamplePreviewHostPattern };
 
     public static ParityRequest Request() => new(ManifestPath, RunDirectory, TimeSpan.Zero);
 
@@ -63,7 +63,7 @@ internal sealed class ParityHarness
         var secrets = new FakeSecrets(Secrets);
         var capture = new FrameCapture(new StepRunner(FakeJudge.Unavailable, new FakeTimeProvider()), new FrameComparison(Files, Codec));
         var service = new ValidatingService<ParityRequest, ParityResponse>(
-            new ParityService(new ParityFilesAccess(Files, json), Locks, secrets, new ParityRun(Browser, capture, Settings)), new ParityValidator());
+            new ParityService(new ParityFilesAccess(Files, json), Locks, secrets, new ParityRun(Browser, capture, Settings), Settings), new ParityValidator());
         return service.Handle(request, interrupt);
     }
 }

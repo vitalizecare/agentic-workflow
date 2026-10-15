@@ -19,7 +19,7 @@ public sealed class ProcessStackProbeContractTests : StackProbeContract, IDispos
         var server = Own(new LocalHttpServer(new Dictionary<string, string>(StringComparer.Ordinal) { ["/login"] = page }));
         var docker = StubCommand.Write(_root, state.DatabaseReady ? "docker-ready" : "docker-down", state.DatabaseReady ? "exit 0" : "echo 'no response' >&2; exit 2");
         var port = state.PortOpen ? Listening() : LocalHttpServer.FreePort();
-        var probe = Own(new ProcessStackProbe(docker));
+        var probe = Own(new ProcessStackProbe(docker, new DatabaseSettings(Container: "db", User: "postgres", SeedTable: null)));
         return Task.FromResult(new StackUnderTest(probe, new Uri(server.Origin + "/login"), "127.0.0.1", port));
     }
 

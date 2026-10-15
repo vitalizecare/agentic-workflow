@@ -25,7 +25,7 @@ public sealed class PublishPlanTests
     [Fact, Trait("Lane", "unit")]
     public async Task PublishPlan_downgrades_a_non_local_host_to_unknown_provenance()
     {
-        var plan = await Plan("https://pr-7.vitalize.build", DbProvenance.Seeded);
+        var plan = await Plan("https://pr-7.preview.example.com", DbProvenance.Seeded);
 
         Assert.Equal((DbProvenance.Unknown, false), (plan.Provenance, plan.LinearUploadAllowed));
         Assert.Contains("evidence stays local", plan.Question, StringComparison.Ordinal);

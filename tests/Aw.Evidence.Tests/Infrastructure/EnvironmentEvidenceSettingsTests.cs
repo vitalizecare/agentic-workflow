@@ -17,8 +17,27 @@ public sealed class EnvironmentEvidenceSettingsTests : IDisposable
         Assert.Null(settings.UserAgent);
         Assert.Equal("judge-default", settings.VisualModel);
         Assert.Equal(["example.com"], settings.SeedPolicy.Domains);
+        Assert.Null(settings.PreviewHostPattern);
+        Assert.Null(settings.ApiPort);
         Assert.Null(await settings.AppTitleAsync(TestContext.Current.CancellationToken));
     }
+
+    [Fact]
+    public void The_preview_host_pattern_and_api_port_come_from_their_variables()
+    {
+        var settings = new EnvironmentEvidenceSettings(Env(("UI_EVIDENCE_PREVIEW_HOST_PATTERN", " pr-[0-9]+\\.preview\\.example\\.com "), ("UI_EVIDENCE_API_PORT", "5002")));
+
+        Assert.Equal(("pr-[0-9]+\\.preview\\.example\\.com", 5002), (settings.PreviewHostPattern, settings.ApiPort));
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("65536")]
+    [InlineData("-1")]
+    [InlineData("50o2")]
+    [InlineData(" ")]
+    public void An_api_port_outside_1_to_65535_is_unset(string value) =>
+        Assert.Null(new EnvironmentEvidenceSettings(Env(("UI_EVIDENCE_API_PORT", value))).ApiPort);
 
     [Fact]
     public async Task Each_setting_comes_from_its_variable()

@@ -1,4 +1,4 @@
-// CLI: ui-evidence parity <manifest.json> <run-dir> [--host https://pr-<n>.vitalize.build --allow-preview-host]
+// CLI: ui-evidence parity <manifest.json> <run-dir> [--host https://<preview-host> --allow-preview-host]
 //                         [--allow-writes] [--app-build sha] [--db-provenance seeded|unknown]
 //      ui-evidence parity-plan <run-dir> [--reviewed file,file]
 // parity exit: 0 all geometry checks passed, 1 bad usage/manifest/guard, 2 a geometry check failed, 4 the run itself errored.

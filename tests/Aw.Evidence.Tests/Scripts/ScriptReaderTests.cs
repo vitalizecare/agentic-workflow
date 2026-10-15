@@ -20,7 +20,7 @@ public sealed class ScriptReaderTests
     {
         var script = Read(Valid).Value;
 
-        Assert.Equal(UserRole.Manager, script.Role);
+        Assert.Equal("manager", script.Role);
         Assert.Equal([ViewportKind.Desktop, ViewportKind.Phone], script.Viewports);
         Assert.Equal(StepAction.ExpectVisible, script.Steps[3].Action);
         Assert.Equal("St", Assert.IsType<InputValue>(script.Steps[1].ExpectedState).Value);
@@ -31,6 +31,8 @@ public sealed class ScriptReaderTests
 
     [Theory, Trait("Lane", "unit")]
     [InlineData("""{"route":"/","role":"manager","viewports":["desktop"],"steps":[]}""", "at least one step")]
+    [InlineData("""{"route":"/","role":"Intern","viewports":["desktop"],"steps":[{"action":"goto","target":"/","expectedState":{"kind":"url-path","path":"/"}}]}""", "role must be a lower-case kebab-case name")]
+    [InlineData("""{"route":"/","role":"","viewports":["desktop"],"steps":[{"action":"goto","target":"/","expectedState":{"kind":"url-path","path":"/"}}]}""", "role must be a lower-case kebab-case name")]
     [InlineData("""{"route":"/","role":"manager","viewports":[],"steps":[{"action":"goto","target":"/","expectedState":{"kind":"url-path","path":"/"}}]}""", "at least one viewport")]
     [InlineData("""{"route":"/","role":"manager","viewports":["desktop"],"steps":[{"action":"goto","target":"/","expectedState":{"kind":"text-visible","text":""}}]}""", "text-visible needs a text")]
     [InlineData("""{"route":"/","role":"manager","viewports":["desktop"],"steps":[{"action":"goto","target":"/","expectedState":{"kind":"url-path","path":"/"}}],"planning":{"inputTokens":-1}}""", "must not be negative")]
@@ -43,7 +45,7 @@ public sealed class ScriptReaderTests
     }
 
     [Theory, Trait("Lane", "unit")]
-    [InlineData("""{"route":"/","role":"intern","viewports":["desktop"],"steps":[{"action":"goto","target":"/","expectedState":{"kind":"url-path","path":"/"}}]}""")]
+    [InlineData("""{"route":"/","role":"super admin","viewports":["desktop"],"steps":[{"action":"goto","target":"/","expectedState":{"kind":"url-path","path":"/"}}]}""")]
     [InlineData("""{"route":"/","role":"manager","viewports":["tablet"],"steps":[{"action":"goto","target":"/","expectedState":{"kind":"url-path","path":"/"}}]}""")]
     [InlineData("""{"route":"/","role":"manager","viewports":["desktop"],"steps":[{"action":"hover","target":"/","expectedState":{"kind":"url-path","path":"/"}}]}""")]
     [InlineData("""{"route":"/","role":"manager","viewports":["desktop"],"steps":[{"action":"goto","target":"/","expectedState":{"kind":"looks-nice"}}]}""")]
@@ -57,7 +59,6 @@ public sealed class ScriptReaderTests
 
     [Theory, Trait("Lane", "unit")]
     [InlineData("""{"route":"/","role":"manager","viewports":["desktop"],"steps":[{"action":"goto","target":"/"}]}""", "$.steps[0]: missing required property \"expectedState\"")]
-    [InlineData("""{"route":"/","role":"intern","viewports":["desktop"],"steps":[]}""", "$.role: \"intern\" is not a valid value")]
     [InlineData("""{"route":"/","role":7,"viewports":["desktop"],"steps":[]}""", "$.role: 7 is not a valid value")]
     [InlineData("""{"route":null,"role":"manager","viewports":["desktop"],"steps":[]}""", "$.route: must not be null")]
     [InlineData("""{"route":"/","role":"manager","viewports":["desktop"],"steps":[{"action":"goto","target":"/","expectedState":{"kind":"url-path"}}]}""", "$.steps[0].expectedState: missing required property \"path\"")]

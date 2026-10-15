@@ -22,6 +22,8 @@ public sealed class DockerPsqlProvenanceContractTests : ProvenanceQueryContract,
         "  if [ -z \"$pattern\" ]; then printf '%s\\n' \"$row\"; else case \"$row\" in $glob) printf '%s\\n' \"$row\" ;; esac; fi\n" +
         "done < \"$ROWS\"\n";
 
+    private static readonly DatabaseSettings _db = new(Container: "db", User: "postgres", SeedTable: "public.users");
+
     private readonly TempDirectory _root = new();
     private int _stubs;
 
@@ -30,11 +32,11 @@ public sealed class DockerPsqlProvenanceContractTests : ProvenanceQueryContract,
         var n = (++_stubs).ToString(CultureInfo.InvariantCulture);
         var rows = _root.Combine("rows-" + n);
         File.WriteAllText(rows, string.Join('\n', emails) + "\n");
-        return new DockerPsqlProvenance(StubCommand.Write(_root, "docker-" + n, "ROWS='" + rows + "'\n" + Psql));
+        return new DockerPsqlProvenance(StubCommand.Write(_root, "docker-" + n, "ROWS='" + rows + "'\n" + Psql), _db);
     }
 
     protected override IProvenanceQuery CreateFailing(string message) =>
-        new DockerPsqlProvenance(StubCommand.Write(_root, "docker-failing", $"cat > /dev/null; echo 'ERROR:  {message.Replace("'", "'\\''", StringComparison.Ordinal)}' >&2; exit 3"));
+        new DockerPsqlProvenance(StubCommand.Write(_root, "docker-failing", $"cat > /dev/null; echo 'ERROR:  {message.Replace("'", "'\\''", StringComparison.Ordinal)}' >&2; exit 3"), _db);
 
     public void Dispose() => _root.Dispose();
 }

@@ -1,6 +1,6 @@
 // CLI: node dist/bin.js <script.json> <run-dir> [--baseline png] [--app-build id]
 //                       [--fixtures id] [--cache manifest.json]
-//                       [--host https://pr-<n>.vitalize.build --allow-preview-host] [--allow-writes]
+//                       [--host https://<preview-host> --allow-preview-host] [--allow-writes]
 // Exit 0 = every step passed; 1 = bad usage/script; 2 = at least one step
 // failed or broken (the summary is still written and printed).
 import { createHash } from "node:crypto";

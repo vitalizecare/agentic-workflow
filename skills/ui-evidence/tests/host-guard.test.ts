@@ -7,31 +7,47 @@ const goto = (target: string): ScriptStep => ({ action: "goto", target, expected
 const click = (target: string): ScriptStep => ({ action: "click", target, expectedState: { kind: "testid-visible", testId: target } });
 
 describe("resolveHost", () => {
+  const env = { UI_EVIDENCE_PREVIEW_HOST_PATTERN: "pr-[0-9]+\\.preview\\.example\\.com" };
   it("defaults to localhost:3000 with no flags", () => {
-    expect(resolveHost({})).toEqual({ ok: true, host: DEFAULT_HOST, kind: "local" });
+    expect(resolveHost({}, {})).toEqual({ ok: true, host: DEFAULT_HOST, kind: "local" });
   });
-  it("accepts a pr-<n>.vitalize.build preview only with --allow-preview-host", () => {
-    expect(resolveHost({ host: "https://pr-17450.vitalize.build", allowPreviewHost: true })).toEqual({ ok: true, host: "https://pr-17450.vitalize.build", kind: "preview" });
-    expect(resolveHost({ host: "https://pr-17450.vitalize.build/" , allowPreviewHost: true })).toMatchObject({ ok: true });
-    expect(resolveHost({ host: "https://pr-17450.vitalize.build" })).toEqual({ ok: false, error: "--host needs --allow-preview-host" });
+  it("accepts a host matching the configured preview pattern only with --allow-preview-host", () => {
+    expect(resolveHost({ host: "https://pr-17450.preview.example.com", allowPreviewHost: true }, env)).toEqual({ ok: true, host: "https://pr-17450.preview.example.com", kind: "preview" });
+    expect(resolveHost({ host: "https://pr-17450.preview.example.com/", allowPreviewHost: true }, env)).toMatchObject({ ok: true });
+    expect(resolveHost({ host: "https://pr-17450.preview.example.com" }, env)).toEqual({ ok: false, error: "--host needs --allow-preview-host" });
+  });
+  it("refuses every non-local host when no preview pattern is configured, naming the variable", () => {
+    for (const e of [{}, { UI_EVIDENCE_PREVIEW_HOST_PATTERN: "  " }]) {
+      const r = resolveHost({ host: "https://pr-1.preview.example.com", allowPreviewHost: true }, e);
+      expect(r).toEqual({ ok: false, error: "--host needs a preview host pattern, and none is configured (set UI_EVIDENCE_PREVIEW_HOST_PATTERN)" });
+    }
+  });
+  it("refuses an invalid pattern without echoing it", () => {
+    expect(resolveHost({ host: "https://pr-1.preview.example.com", allowPreviewHost: true }, { UI_EVIDENCE_PREVIEW_HOST_PATTERN: "pr-(" })).toEqual({ ok: false, error: "UI_EVIDENCE_PREVIEW_HOST_PATTERN is not a valid regular expression" });
+  });
+  it("matches the whole hostname, so an alternation cannot widen it to a suffix or prefix", () => {
+    const alt = { UI_EVIDENCE_PREVIEW_HOST_PATTERN: "pr-1\\.preview\\.example\\.com|pr-2\\.preview\\.example\\.com" };
+    expect(resolveHost({ host: "https://pr-2.preview.example.com", allowPreviewHost: true }, alt)).toMatchObject({ ok: true });
+    expect(resolveHost({ host: "https://pr-1.preview.example.com.evil.com", allowPreviewHost: true }, alt)).toMatchObject({ ok: false });
+    expect(resolveHost({ host: "https://evil-pr-2.preview.example.com", allowPreviewHost: true }, alt)).toMatchObject({ ok: false });
   });
   it.each([
-    ["https://app.vitalize.build", "not a pr-"],
-    ["https://dev.vitalize.build", "not a pr-"],
-    ["https://vitalize.build", "not a pr-"],
-    ["https://pr-1.vitalize.build.evil.com", "not a pr-"],
-    ["https://pr-abc.vitalize.build", "not a pr-"],
-    ["https://app.vitalize.care", "not a pr-"],
-    ["http://pr-1.vitalize.build", "must be https"],
-    ["https://user:pw@pr-1.vitalize.build", "credentials"],
-    ["https://pr-1.vitalize.build:8443", "bare origin"],
-    ["https://pr-1.vitalize.build/admin", "bare origin"],
-    ["https://pr-1.vitalize.build/?x=1", "bare origin"],
-    ["https://pr-1.vitalize.build/#x", "bare origin"],
+    ["https://app.preview.example.com", "not a preview host"],
+    ["https://dev.example.com", "not a preview host"],
+    ["https://example.com", "not a preview host"],
+    ["https://pr-1.preview.example.com.evil.com", "not a preview host"],
+    ["https://pr-abc.preview.example.com", "not a preview host"],
+    ["https://app.example.org", "not a preview host"],
+    ["http://pr-1.preview.example.com", "must be https"],
+    ["https://user:pw@pr-1.preview.example.com", "credentials"],
+    ["https://pr-1.preview.example.com:8443", "bare origin"],
+    ["https://pr-1.preview.example.com/admin", "bare origin"],
+    ["https://pr-1.preview.example.com/?x=1", "bare origin"],
+    ["https://pr-1.preview.example.com/#x", "bare origin"],
     ["not a url", "not a URL"],
     ["localhost:3000", "must be https"],
   ])("refuses %s", (host, why) => {
-    const r = resolveHost({ host, allowPreviewHost: true });
+    const r = resolveHost({ host, allowPreviewHost: true }, env);
     expect(r.ok).toBe(false);
     expect(r.ok ? "" : r.error).toContain(why);
   });
@@ -83,11 +99,11 @@ describe("goto origin guard", () => {
   it("accepts a single-slash path and rejects anything that could rewrite the host", () => {
     expect(isSameOriginPath("/admin?x=1")).toBe(true);
     expect(isSameOriginPath("/a@b.com")).toBe(true);
-    for (const bad of ["@app.vitalize.build/admin", ".evil.com", "//evil.com", "/\\evil.com", "https://evil.com", ""]) expect(isSameOriginPath(bad)).toBe(false);
+    for (const bad of ["@app.example.com/admin", ".evil.com", "//evil.com", "/\\evil.com", "https://evil.com", ""]) expect(isSameOriginPath(bad)).toBe(false);
   });
   it("guardWrites refuses off-origin goto targets even with --allow-writes", () => {
-    const steps = [goto("/ok"), goto("@app.vitalize.build/admin")];
-    expect(guardWrites(steps, true)).toEqual({ ok: false, error: 'goto targets must be paths on the host (start with a single "/"): #2 goto @app.vitalize.build/admin' });
+    const steps = [goto("/ok"), goto("@app.example.com/admin")];
+    expect(guardWrites(steps, true)).toEqual({ ok: false, error: 'goto targets must be paths on the host (start with a single "/"): #2 goto @app.example.com/admin' });
     expect(guardWrites(steps, false).ok).toBe(false);
   });
   it("flags a goto to a mutating path, ignoring the query string", () => {
@@ -95,9 +111,9 @@ describe("goto origin guard", () => {
     expect(guardWrites([goto("/hospital/1/delete")], false)).toEqual({ ok: false, error: "refusing write-looking steps without --allow-writes: #1 goto /hospital/1/delete" });
   });
   it("detects off-origin navigations only", () => {
-    const host = "https://pr-1.vitalize.build";
-    expect(isOffOriginNavigation(host, "https://pr-1.vitalize.build/x", true)).toBe(false);
-    expect(isOffOriginNavigation(host, "https://app.vitalize.build/x", true)).toBe(true);
+    const host = "https://pr-1.preview.example.com";
+    expect(isOffOriginNavigation(host, "https://pr-1.preview.example.com/x", true)).toBe(false);
+    expect(isOffOriginNavigation(host, "https://app.example.com/x", true)).toBe(true);
     expect(isOffOriginNavigation(host, "https://cdn.example.com/a.js", false)).toBe(false);
     expect(isOffOriginNavigation(host, "about:blank", true)).toBe(false);
   });
@@ -123,7 +139,7 @@ describe("provenanceFor", () => {
     expect(provenanceFor("local", undefined)).toBe("unknown");
   });
   it("only localhost counts as a local host", () => {
-    expect([isLocalHost(undefined), isLocalHost("http://localhost:3000"), isLocalHost("http://127.0.0.1:4000"), isLocalHost("https://pr-1.vitalize.build")]).toEqual([true, true, true, false]);
+    expect([isLocalHost(undefined), isLocalHost("http://localhost:3000"), isLocalHost("http://127.0.0.1:4000"), isLocalHost("https://pr-1.preview.example.com")]).toEqual([true, true, true, false]);
   });
 });
 

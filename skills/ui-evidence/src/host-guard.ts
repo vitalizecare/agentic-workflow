@@ -4,9 +4,22 @@
 import type { ScriptStep } from "./script-schema.js";
 
 export const DEFAULT_HOST = "http://localhost:3000";
-// Only per-PR living previews: pr-<number>.vitalize.build. dev/staging/prod
-// hosts under the same domain are deliberately not matched.
-const PREVIEW_HOST = /^pr-\d+\.vitalize\.build$/;
+// Which hostnames count as per-PR preview hosts is deployment-specific:
+// UI_EVIDENCE_PREVIEW_HOST_PATTERN, a regex matched against the whole
+// hostname (e.g. `pr-[0-9]+\.preview\.example\.com`). Write it so dev,
+// staging and prod hosts under the same domain never match. Unset, no
+// preview host is accepted.
+export const PREVIEW_HOST_PATTERN_VARIABLE = "UI_EVIDENCE_PREVIEW_HOST_PATTERN";
+
+function previewHostPattern(env: Record<string, string | undefined>): RegExp | { error: string } {
+  const raw = env[PREVIEW_HOST_PATTERN_VARIABLE];
+  if (raw === undefined || raw.trim() === "") return { error: `--host needs a preview host pattern, and none is configured (set ${PREVIEW_HOST_PATTERN_VARIABLE})` };
+  try {
+    return new RegExp(`^(?:${raw.trim()})$`);
+  } catch {
+    return { error: `${PREVIEW_HOST_PATTERN_VARIABLE} is not a valid regular expression` };
+  }
+}
 
 export type HostResult = { ok: true; host: string; kind: "local" | "preview" } | { ok: false; error: string };
 
@@ -15,7 +28,7 @@ export interface HostFlags {
   allowPreviewHost?: boolean;
 }
 
-export function resolveHost(flags: HostFlags): HostResult {
+export function resolveHost(flags: HostFlags, env: Record<string, string | undefined> = process.env): HostResult {
   if (flags.host === undefined) return { ok: true, host: DEFAULT_HOST, kind: "local" };
   let url: URL;
   try {
@@ -25,7 +38,9 @@ export function resolveHost(flags: HostFlags): HostResult {
   }
   if (url.protocol !== "https:") return { ok: false, error: "--host must be https" };
   if (url.username !== "" || url.password !== "") return { ok: false, error: "--host must not carry credentials" };
-  if (!PREVIEW_HOST.test(url.hostname)) return { ok: false, error: `--host ${url.hostname} is not a pr-<n>.vitalize.build preview host; dev and prod hosts are refused` };
+  const preview = previewHostPattern(env);
+  if ("error" in preview) return { ok: false, error: preview.error };
+  if (!preview.test(url.hostname)) return { ok: false, error: `--host ${url.hostname} is not a preview host (${PREVIEW_HOST_PATTERN_VARIABLE}); dev and prod hosts are refused` };
   if (url.port !== "" || (url.pathname !== "/" && url.pathname !== "") || url.search !== "" || url.hash !== "") return { ok: false, error: "--host must be a bare origin (no port, path, query or fragment)" };
   if (flags.allowPreviewHost !== true) return { ok: false, error: "--host needs --allow-preview-host" };
   return { ok: true, host: url.origin, kind: "preview" };
@@ -76,7 +91,7 @@ export function findWriteSteps(steps: ScriptStep[]): Array<{ index: number; targ
 }
 
 /**
- * The goto origin check always applies (a target like `@app.vitalize.build/x` would leave the vetted
+ * The goto origin check always applies (a target like `@app.example.com/x` would leave the vetted
  * host); the write-word check is skipped under --allow-writes.
  */
 export function guardWrites(steps: ScriptStep[], allowWrites: boolean): { ok: true } | { ok: false; error: string } {

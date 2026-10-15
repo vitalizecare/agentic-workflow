@@ -18,7 +18,7 @@ public sealed class ProvenanceAndCredentialsTests
 
     [Theory, Trait("Lane", "unit")]
     [InlineData("http://localhost:3000", DbProvenance.Seeded)]
-    [InlineData("https://pr-1.vitalize.build", DbProvenance.Unknown)]
+    [InlineData("https://pr-1.preview.example.com", DbProvenance.Unknown)]
     public void A_non_local_run_is_never_seeded(string host, DbProvenance expected) =>
         Assert.Equal(expected, ProvenanceRules.Effective(host, DbProvenance.Seeded));
 

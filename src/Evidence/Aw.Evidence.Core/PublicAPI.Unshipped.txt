@@ -729,7 +729,7 @@ Aw.Evidence.Core.Runs.RunSummary.Planning.get -> Aw.Evidence.Core.Scripts.Planni
 Aw.Evidence.Core.Runs.RunSummary.Planning.init -> void
 Aw.Evidence.Core.Runs.RunSummary.Pr.get -> string?
 Aw.Evidence.Core.Runs.RunSummary.Pr.init -> void
-Aw.Evidence.Core.Runs.RunSummary.Role.get -> Aw.Evidence.Core.Scripts.UserRole
+Aw.Evidence.Core.Runs.RunSummary.Role.get -> string!
 Aw.Evidence.Core.Runs.RunSummary.Role.init -> void
 Aw.Evidence.Core.Runs.RunSummary.Route.get -> string!
 Aw.Evidence.Core.Runs.RunSummary.Route.init -> void
@@ -837,17 +837,17 @@ Aw.Evidence.Core.Scripts.TextVisible.Text.init -> void
 Aw.Evidence.Core.Scripts.TextVisible.TextVisible(string! Text) -> void
 Aw.Evidence.Core.Scripts.UiScript
 Aw.Evidence.Core.Scripts.UiScript.<Clone>$() -> Aw.Evidence.Core.Scripts.UiScript!
-Aw.Evidence.Core.Scripts.UiScript.Deconstruct(out string! Route, out Aw.Evidence.Core.Scripts.UserRole Role, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ScriptStep!>! Steps, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ViewportKind>! Viewports, out Aw.Evidence.Core.Scripts.PlanningMeta? Planning) -> void
+Aw.Evidence.Core.Scripts.UiScript.Deconstruct(out string! Route, out string! Role, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ScriptStep!>! Steps, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ViewportKind>! Viewports, out Aw.Evidence.Core.Scripts.PlanningMeta? Planning) -> void
 Aw.Evidence.Core.Scripts.UiScript.Equals(Aw.Evidence.Core.Scripts.UiScript? other) -> bool
 Aw.Evidence.Core.Scripts.UiScript.Planning.get -> Aw.Evidence.Core.Scripts.PlanningMeta?
 Aw.Evidence.Core.Scripts.UiScript.Planning.init -> void
-Aw.Evidence.Core.Scripts.UiScript.Role.get -> Aw.Evidence.Core.Scripts.UserRole
+Aw.Evidence.Core.Scripts.UiScript.Role.get -> string!
 Aw.Evidence.Core.Scripts.UiScript.Role.init -> void
 Aw.Evidence.Core.Scripts.UiScript.Route.get -> string!
 Aw.Evidence.Core.Scripts.UiScript.Route.init -> void
 Aw.Evidence.Core.Scripts.UiScript.Steps.get -> System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ScriptStep!>!
 Aw.Evidence.Core.Scripts.UiScript.Steps.init -> void
-Aw.Evidence.Core.Scripts.UiScript.UiScript(string! Route, Aw.Evidence.Core.Scripts.UserRole Role, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ScriptStep!>! Steps, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ViewportKind>! Viewports, Aw.Evidence.Core.Scripts.PlanningMeta? Planning = null) -> void
+Aw.Evidence.Core.Scripts.UiScript.UiScript(string! Route, string! Role, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ScriptStep!>! Steps, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ViewportKind>! Viewports, Aw.Evidence.Core.Scripts.PlanningMeta? Planning = null) -> void
 Aw.Evidence.Core.Scripts.UiScript.Viewports.get -> System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ViewportKind>!
 Aw.Evidence.Core.Scripts.UiScript.Viewports.init -> void
 Aw.Evidence.Core.Scripts.UrlPath
@@ -856,11 +856,6 @@ Aw.Evidence.Core.Scripts.UrlPath.Equals(Aw.Evidence.Core.Scripts.UrlPath? other)
 Aw.Evidence.Core.Scripts.UrlPath.Path.get -> string!
 Aw.Evidence.Core.Scripts.UrlPath.Path.init -> void
 Aw.Evidence.Core.Scripts.UrlPath.UrlPath(string! Path) -> void
-Aw.Evidence.Core.Scripts.UserRole
-Aw.Evidence.Core.Scripts.UserRole.CentralStaffer = 2 -> Aw.Evidence.Core.Scripts.UserRole
-Aw.Evidence.Core.Scripts.UserRole.Manager = 0 -> Aw.Evidence.Core.Scripts.UserRole
-Aw.Evidence.Core.Scripts.UserRole.Staff = 1 -> Aw.Evidence.Core.Scripts.UserRole
-Aw.Evidence.Core.Scripts.UserRole.SuperAdmin = 3 -> Aw.Evidence.Core.Scripts.UserRole
 Aw.Evidence.Core.Scripts.ViewportKind
 Aw.Evidence.Core.Scripts.ViewportKind.Desktop = 0 -> Aw.Evidence.Core.Scripts.ViewportKind
 Aw.Evidence.Core.Scripts.ViewportKind.Phone = 1 -> Aw.Evidence.Core.Scripts.ViewportKind
@@ -1351,7 +1346,7 @@ static Aw.Evidence.Core.Guard.Credentials.Read(Aw.Evidence.Core.Guard.ISecretsSo
 static Aw.Evidence.Core.Guard.HostGuard.IsLocal(string! origin) -> bool
 static Aw.Evidence.Core.Guard.HostGuard.IsOffOriginNavigation(string! origin, string! url, bool isNavigation) -> bool
 static Aw.Evidence.Core.Guard.HostGuard.OriginOf(string! url) -> string!
-static Aw.Evidence.Core.Guard.HostGuard.Resolve(string? host, bool allowPreviewHost) -> Aw.Kernel.Result<Aw.Evidence.Core.Guard.ResolvedHost!>!
+static Aw.Evidence.Core.Guard.HostGuard.Resolve(string? host, bool allowPreviewHost, string? previewHostPattern) -> Aw.Kernel.Result<Aw.Evidence.Core.Guard.ResolvedHost!>!
 static Aw.Evidence.Core.Guard.ProvenanceRules.Effective(string! host, Aw.Evidence.Core.Guard.DbProvenance claimed) -> Aw.Evidence.Core.Guard.DbProvenance
 static Aw.Evidence.Core.Guard.ProvenanceRules.For(Aw.Evidence.Core.Guard.HostKind kind, Aw.Evidence.Core.Guard.DbProvenance? database) -> Aw.Evidence.Core.Guard.Provenance
 static Aw.Evidence.Core.Guard.ResolvedHost.operator !=(Aw.Evidence.Core.Guard.ResolvedHost? left, Aw.Evidence.Core.Guard.ResolvedHost? right) -> bool
@@ -1546,10 +1541,10 @@ Aw.Evidence.Core.Ids.RunInstanceId.IsInitialized() -> bool
 Aw.Evidence.Core.Ids.RunInstanceId.RunInstanceId() -> void
 Aw.Evidence.Core.Ids.RunInstanceId.ToString(System.IFormatProvider? provider) -> string!
 Aw.Evidence.Core.Ids.RunInstanceId.Value.get -> string!
-Aw.Evidence.Core.Runs.RunSummary.Deconstruct(out string! Schema, out Aw.Evidence.Core.Ids.RunId RunId, out Aw.Evidence.Core.Ids.RunInstanceId RunInstance, out System.DateTimeOffset StartedAt, out System.DateTimeOffset FinishedAt, out string! Route, out Aw.Evidence.Core.Scripts.UserRole Role, out string! Host, out string? AppBuild, out string? Fixtures, out string! ScriptSha256, out string? Pr, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ViewportKind>! Viewports, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Runs.RunStep!>! Steps, out Aw.Evidence.Core.Runs.RunVisual! Visual, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Runs.RunLintFinding!>! LintFindings, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Usage.ModelInvocation!>! Invocations, out Aw.Evidence.Core.Scripts.PlanningMeta? Planning, out Aw.Evidence.Core.Runs.RunEvidence! Evidence) -> void
+Aw.Evidence.Core.Runs.RunSummary.Deconstruct(out string! Schema, out Aw.Evidence.Core.Ids.RunId RunId, out Aw.Evidence.Core.Ids.RunInstanceId RunInstance, out System.DateTimeOffset StartedAt, out System.DateTimeOffset FinishedAt, out string! Route, out string! Role, out string! Host, out string? AppBuild, out string? Fixtures, out string! ScriptSha256, out string? Pr, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ViewportKind>! Viewports, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Runs.RunStep!>! Steps, out Aw.Evidence.Core.Runs.RunVisual! Visual, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Runs.RunLintFinding!>! LintFindings, out System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Usage.ModelInvocation!>! Invocations, out Aw.Evidence.Core.Scripts.PlanningMeta? Planning, out Aw.Evidence.Core.Runs.RunEvidence! Evidence) -> void
 Aw.Evidence.Core.Runs.RunSummary.RunInstance.get -> Aw.Evidence.Core.Ids.RunInstanceId
 Aw.Evidence.Core.Runs.RunSummary.RunInstance.init -> void
-Aw.Evidence.Core.Runs.RunSummary.RunSummary(string! Schema, Aw.Evidence.Core.Ids.RunId RunId, Aw.Evidence.Core.Ids.RunInstanceId RunInstance, System.DateTimeOffset StartedAt, System.DateTimeOffset FinishedAt, string! Route, Aw.Evidence.Core.Scripts.UserRole Role, string! Host, string? AppBuild, string? Fixtures, string! ScriptSha256, string? Pr, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ViewportKind>! Viewports, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Runs.RunStep!>! Steps, Aw.Evidence.Core.Runs.RunVisual! Visual, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Runs.RunLintFinding!>! LintFindings, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Usage.ModelInvocation!>! Invocations, Aw.Evidence.Core.Scripts.PlanningMeta? Planning, Aw.Evidence.Core.Runs.RunEvidence! Evidence) -> void
+Aw.Evidence.Core.Runs.RunSummary.RunSummary(string! Schema, Aw.Evidence.Core.Ids.RunId RunId, Aw.Evidence.Core.Ids.RunInstanceId RunInstance, System.DateTimeOffset StartedAt, System.DateTimeOffset FinishedAt, string! Route, string! Role, string! Host, string? AppBuild, string? Fixtures, string! ScriptSha256, string? Pr, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Scripts.ViewportKind>! Viewports, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Runs.RunStep!>! Steps, Aw.Evidence.Core.Runs.RunVisual! Visual, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Runs.RunLintFinding!>! LintFindings, System.Collections.Generic.IReadOnlyList<Aw.Evidence.Core.Usage.ModelInvocation!>! Invocations, Aw.Evidence.Core.Scripts.PlanningMeta? Planning, Aw.Evidence.Core.Runs.RunEvidence! Evidence) -> void
 Aw.Evidence.Core.Visual.CachedVerdict.CachedVerdict(Aw.Evidence.Core.Judging.VisualDecision Decision, System.Collections.Generic.IReadOnlyList<string!>! Reasons, Aw.Evidence.Core.Ids.RunInstanceId RunInstance) -> void
 Aw.Evidence.Core.Visual.CachedVerdict.Deconstruct(out Aw.Evidence.Core.Judging.VisualDecision Decision, out System.Collections.Generic.IReadOnlyList<string!>! Reasons, out Aw.Evidence.Core.Ids.RunInstanceId RunInstance) -> void
 Aw.Evidence.Core.Visual.CachedVerdict.RunInstance.get -> Aw.Evidence.Core.Ids.RunInstanceId
@@ -1575,5 +1570,7 @@ Aw.Evidence.Core.Settings.IEvidenceSettings
 Aw.Evidence.Core.Settings.IEvidenceSettings.AppTitleAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<string?>
 Aw.Evidence.Core.Settings.IEvidenceSettings.AppTitleSource.get -> string!
 Aw.Evidence.Core.Settings.IEvidenceSettings.SeedPolicy.get -> Aw.Evidence.Core.Stack.SeedPolicy!
+Aw.Evidence.Core.Settings.IEvidenceSettings.PreviewHostPattern.get -> string?
+Aw.Evidence.Core.Settings.IEvidenceSettings.ApiPort.get -> int?
 Aw.Evidence.Core.Settings.IEvidenceSettings.UserAgent.get -> string?
 Aw.Evidence.Core.Settings.IEvidenceSettings.VisualModel.get -> string!

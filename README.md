@@ -144,7 +144,7 @@ After setup, a couple of provider-specific steps remain:
 ## Setup
 
 ```bash
-git clone https://github.com/vitalizecare/agentic-workflow.git ~/repos/agentic-workflow
+git clone https://github.com/jthorare/agentic-workflow.git ~/repos/agentic-workflow
 cd ~/repos/agentic-workflow
 ./setup.sh                 # or: ./setup.sh --providers claude,codex,cursor
 ```

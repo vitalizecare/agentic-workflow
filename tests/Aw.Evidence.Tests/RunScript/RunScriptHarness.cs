@@ -31,7 +31,7 @@ internal sealed class RunScriptHarness
 
     public FakeJudge Judge { get; set; } = FakeJudge.Unavailable;
 
-    public FakeEvidenceSettings Settings { get; } = new();
+    public FakeEvidenceSettings Settings { get; } = new() { PreviewHostPattern = FakeEvidenceSettings.ExamplePreviewHostPattern };
 
     public SequentialIds Ids { get; } = new();
 
@@ -53,7 +53,7 @@ internal sealed class RunScriptHarness
         var run = new ScriptRun(Browser, new StepRunner(Judge, Clock), Files, Settings);
         var verdict = new RunVerdict(new VisualGate(Files, Codec, Judge, Clock, json), Cache, Settings, json);
         var service = new ValidatingService<RunScriptRequest, RunScriptResponse>(
-            new RunScriptService(new ScriptFiles(Files, json), Locks, run, verdict, Clock, Ids), new RunScriptValidator());
+            new RunScriptService(new ScriptFiles(Files, json), Locks, run, verdict, Clock, Ids, Settings), new RunScriptValidator());
         return service.Handle(request, interrupt);
     }
 }

@@ -6,11 +6,12 @@ namespace Aw.Evidence.Core.Guard;
 
 /// <summary>
 /// Decides which host a run may drive before anything touches the network. Accepted: the default
-/// http://localhost:3000; a loopback origin http://localhost:&lt;port&gt; or http://127.0.0.1:&lt;port&gt; (local); a
-/// per-PR preview https://pr-&lt;n&gt;.vitalize.build with --allow-preview-host. Every --host is a bare origin with no
-/// credentials, path, query or fragment. Everything else (dev, staging, prod) is refused.
+/// http://localhost:3000; a loopback origin http://localhost:&lt;port&gt; or http://127.0.0.1:&lt;port&gt; (local); an https
+/// preview host whose whole hostname matches the deployment's preview pattern, with --allow-preview-host. Every --host is
+/// a bare origin with no credentials, path, query or fragment. Everything else (dev, staging, prod, and every
+/// non-loopback host when no pattern is configured) is refused.
 /// </summary>
-public static partial class HostGuard
+public static class HostGuard
 {
     /// <summary>The default host: the local stack.</summary>
     public const string DefaultOrigin = "http://localhost:3000";
@@ -18,8 +19,9 @@ public static partial class HostGuard
     /// <summary>Resolves the --host flag.</summary>
     /// <param name="host">The flag's value; null for the default.</param>
     /// <param name="allowPreviewHost">Whether --allow-preview-host was given.</param>
+    /// <param name="previewHostPattern">The regex a preview's whole hostname must match, or null when none is configured.</param>
     /// <returns>The host, or AW-EVIDENCE-004 saying why it is refused.</returns>
-    public static Result<ResolvedHost> Resolve(string? host, bool allowPreviewHost)
+    public static Result<ResolvedHost> Resolve(string? host, bool allowPreviewHost, string? previewHostPattern)
     {
         if (host is null)
         {
@@ -33,7 +35,7 @@ public static partial class HostGuard
 
         return BareOriginProblem(url, host) is { } problem
             ? Refused(problem)
-            : IsLoopback(url) ? Loopback(url) : Preview(url, allowPreviewHost);
+            : IsLoopback(url) ? Loopback(url) : Preview(url, allowPreviewHost, previewHostPattern);
     }
 
     /// <summary>True when <paramref name="origin"/> is this machine (localhost or 127.0.0.1).</summary>
@@ -92,16 +94,27 @@ public static partial class HostGuard
         return new ResolvedHost(string.Create(CultureInfo.InvariantCulture, $"http://{url.Host}:{url.Port}"), HostKind.Local);
     }
 
-    private static Result<ResolvedHost> Preview(Uri url, bool allowPreviewHost)
+    private static Result<ResolvedHost> Preview(Uri url, bool allowPreviewHost, string? previewHostPattern)
     {
         if (url.Scheme != Uri.UriSchemeHttps)
         {
             return Refused("a non-loopback --host must be https");
         }
 
-        if (!PreviewHost.IsMatch(url.Host))
+        if (string.IsNullOrWhiteSpace(previewHostPattern))
         {
-            return Refused($"--host {url.Host} is not a pr-<n>.vitalize.build preview host; dev and prod hosts are refused");
+            return Refused($"--host needs a preview host pattern, and none is configured (set {PreviewHostPatternVariable})");
+        }
+
+        var matched = IsPreviewHost(url.Host, previewHostPattern);
+        if (matched is null)
+        {
+            return Refused($"{PreviewHostPatternVariable} is not a valid regular expression");
+        }
+
+        if (matched is false)
+        {
+            return Refused($"--host {url.Host} is not a preview host ({PreviewHostPatternVariable}); dev and prod hosts are refused");
         }
 
         if (!url.IsDefaultPort)
@@ -119,7 +132,20 @@ public static partial class HostGuard
 
     private static Error Refused(string message) => EvidenceErrors.HostRefused.With(message);
 
-    // Per-PR previews only; dev, staging and prod hosts under the same domain never match.
-    [GeneratedRegex("^pr-[0-9]+\\.vitalize\\.build\\z", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
-    private static partial Regex PreviewHost { get; }
+    // The setting is named in refusals so a person knows what to fix; Infrastructure reads it under this name.
+    private const string PreviewHostPatternVariable = "UI_EVIDENCE_PREVIEW_HOST_PATTERN";
+
+    // The whole hostname must match (an alternation can't widen the pattern to a prefix or suffix); null when the pattern
+    // doesn't compile or times out, which refuses the host.
+    private static bool? IsPreviewHost(string hostname, string pattern)
+    {
+        try
+        {
+            return Regex.IsMatch(hostname, $"^(?:{pattern.Trim()})\\z", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        }
+        catch (Exception ex) when (ex is ArgumentException or RegexMatchTimeoutException)
+        {
+            return null;
+        }
+    }
 }

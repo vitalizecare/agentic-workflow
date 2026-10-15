@@ -61,7 +61,7 @@ public abstract class ProvenanceQueryContract
     [Fact]
     public async Task A_failed_query_is_a_probe_failure_with_the_message()
     {
-        var all = await CreateFailing("relation \"public.profile\" does not exist").AllEmailsAsync(CancellationToken.None);
+        var all = await CreateFailing("relation \"public.users\" does not exist").AllEmailsAsync(CancellationToken.None);
 
         Expect.That(all.IsError && all.Error.Code == EvidenceErrors.ProbeFailed.Code, "a failed query is AW-EVIDENCE-014");
         Expect.That(all.Error.Message.Contains("does not exist", StringComparison.Ordinal), "the message says why");

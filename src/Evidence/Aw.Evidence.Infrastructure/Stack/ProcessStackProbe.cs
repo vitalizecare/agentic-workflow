@@ -11,9 +11,10 @@ namespace Aw.Evidence.Infrastructure.Stack;
 
 /// <summary>
 /// Probes the local stack: a page's &lt;title&gt; over HTTP (5 s), the database through
-/// 'docker exec postgres_container pg_isready -U postgres', and a TCP connect to a port.
+/// 'docker exec &lt;container&gt; pg_isready -U &lt;user&gt;' (no container configured: nothing to probe, so ready), and a
+/// TCP connect to a port.
 /// </summary>
-internal sealed partial class ProcessStackProbe(string docker) : IStackProbe, IDisposable
+internal sealed partial class ProcessStackProbe(string docker, DatabaseSettings database) : IStackProbe, IDisposable
 {
     private static readonly TimeSpan _limit = TimeSpan.FromSeconds(5);
 
@@ -39,8 +40,13 @@ internal sealed partial class ProcessStackProbe(string docker) : IStackProbe, ID
     /// <inheritdoc/>
     public async ValueTask<Result<Unit>> DatabaseReadyAsync(CancellationToken cancellationToken)
     {
+        if (database.Container is not { } container)
+        {
+            return Results.Ok();
+        }
+
         var ready = await ProcessRunner.RunAsync(
-            [docker, "exec", "postgres_container", "pg_isready", "-U", "postgres"], standardInput: null, TimeSpan.FromSeconds(15), EvidenceErrors.ProbeFailed, cancellationToken)
+            [docker, "exec", container, "pg_isready", "-U", database.User], standardInput: null, TimeSpan.FromSeconds(15), EvidenceErrors.ProbeFailed, cancellationToken)
             .ConfigureAwait(false);
         return ready.Bind(outcome => outcome.ExitCode == 0
             ? Results.Ok()

@@ -47,7 +47,7 @@ You don't install anything per repo. Skills and hooks are global. The only per-r
 ### Run setup
 
 ```bash
-git clone https://github.com/vitalizecare/agentic-workflow.git ~/repos/agentic-workflow
+git clone https://github.com/jthorare/agentic-workflow.git ~/repos/agentic-workflow
 cd ~/repos/agentic-workflow
 
 ./setup.sh --dry-run    # optional: print every change without writing anything

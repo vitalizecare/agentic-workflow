@@ -18,7 +18,7 @@ The model calls are: one planning call (`qa-runner`), selector repair
 | 02 spend models where needed | **Gate done; planner pilot pending** | Pixel gate skips the image model on unchanged runs; Jev never receives image bytes (tests). `qa-runner.md` still says `model: sonnet` (the rollback value) — no cheaper model is switched in until the pilot below is run. |
 | 03 verdict cache | **Done** | Keyed on actual image hashes + prompt/model, app build, script, fixtures, viewport, browser version. Never skips the browser run. |
 | 04 compact discovery | **Not started — conditional** | Do only if step 00 shows planner input tokens dominate. No `agent-browser` adapter added. |
-| 05 packaging | **Partly done** | `RunSummary` carries `diffScore` and `evidence` (traces, videos, diff overlay); `publish.ts` renders URLs from an approved `uploadArtifact`, seeded-provenance only. **Not done:** the consuming Vitalize CI (private, not inspected), so no CI artifact upload, retention or access settings were chosen. |
+| 05 packaging | **Partly done** | `RunSummary` carries `diffScore` and `evidence` (traces, videos, diff overlay); `publish.ts` renders URLs from an approved `uploadArtifact`, seeded-provenance only. **Not done:** the consuming app's CI (private, not inspected), so no CI artifact upload, retention or access settings were chosen. |
 
 ## Also fixed along the way
 

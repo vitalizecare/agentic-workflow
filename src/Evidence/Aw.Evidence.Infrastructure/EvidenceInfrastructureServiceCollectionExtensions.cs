@@ -37,14 +37,15 @@ public static class EvidenceInfrastructureServiceCollectionExtensions
     public static IServiceCollection AddEvidenceInfrastructure(this IServiceCollection services, Func<string, string?> environment)
     {
         var settings = SettingsFromEnvironment.Read(environment);
+        var database = DatabaseSettings.Read(environment);
         return services
             .AddSingleton(settings)
             .AddSingleton<IMachineLocks>(static sp => new DirectoryLocks(sp.GetRequiredService<EvidenceSettings>().Locks, sp.GetRequiredService<TimeProvider>(), Console.Error))
             .AddSingleton<IRunFiles, FileRunFiles>()
             .AddSingleton<IImageCodec, PngCodec>()
             .AddSingleton<IVerdictCacheStore, FileVerdictCacheStore>()
-            .AddSingleton<IStackProbe>(static _ => new ProcessStackProbe("docker"))
-            .AddSingleton<IProvenanceQuery>(new DockerPsqlProvenance("docker"))
+            .AddSingleton<IStackProbe>(_ => new ProcessStackProbe("docker", database))
+            .AddSingleton<IProvenanceQuery>(new DockerPsqlProvenance("docker", database))
             .AddSingleton<ISecretsSource>(new EnvironmentSecrets(environment))
             .AddSingleton<IEvidenceSettings>(new EnvironmentEvidenceSettings(environment))
             .AddSingleton<IBrowser, PlaywrightBrowser>()

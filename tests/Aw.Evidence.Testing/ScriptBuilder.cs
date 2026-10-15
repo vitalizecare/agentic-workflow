@@ -58,5 +58,5 @@ public sealed class ScriptBuilder
 
     /// <summary>Builds the script (one goto step when none were added).</summary>
     /// <returns>The script.</returns>
-    public UiScript Build() => new("/hospitals", UserRole.Manager, _steps.Count > 0 ? [.. _steps] : [Goto("/hospitals")], _viewports, _planning);
+    public UiScript Build() => new("/hospitals", "manager", _steps.Count > 0 ? [.. _steps] : [Goto("/hospitals")], _viewports, _planning);
 }

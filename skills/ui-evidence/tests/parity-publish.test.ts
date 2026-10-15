@@ -19,7 +19,7 @@ const entry = (over: { known?: string[]; pass?: boolean; name?: string } = {}) =
   });
 
 const summary = (over: Partial<ParitySummary> = {}): ParitySummary => ({
-  runId: "r1", host: "https://pr-1.vitalize.build", provenance: "scrubbed", appBuild: "abc1234", designNode: "12:34", viewport: { w: 1512, h: 982 }, frames: { A: entry({ known: ["copy", "data"] }) }, ...over,
+  runId: "r1", host: "https://pr-1.preview.example.com", provenance: "scrubbed", appBuild: "abc1234", designNode: "12:34", viewport: { w: 1512, h: 982 }, frames: { A: entry({ known: ["copy", "data"] }) }, ...over,
 });
 
 describe("provenance policy", () => {

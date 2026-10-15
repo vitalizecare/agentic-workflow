@@ -32,7 +32,7 @@ public sealed record RunSummary(
     DateTimeOffset StartedAt,
     DateTimeOffset FinishedAt,
     string Route,
-    UserRole Role,
+    string Role,
     string Host,
     string? AppBuild,
     string? Fixtures,

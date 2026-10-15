@@ -30,7 +30,7 @@ describe("publishEvidence", () => {
     const uploadArtifact = vi.fn();
     const postPrComment = vi.fn().mockResolvedValue(true);
     const ask = vi.fn().mockResolvedValue(true);
-    const result = await publishEvidence({ runId: "r1", localDir: "/tmp/r1", provenance: "seeded", linearIssueId: "ISS-1", uploadToLinear, uploadArtifact, postPrComment, ask }, { ...summary, host: "https://pr-9.vitalize.build" });
+    const result = await publishEvidence({ runId: "r1", localDir: "/tmp/r1", provenance: "seeded", linearIssueId: "ISS-1", uploadToLinear, uploadArtifact, postPrComment, ask }, { ...summary, host: "https://pr-9.preview.example.com" });
     expect(uploadToLinear).not.toHaveBeenCalled();
     expect(uploadArtifact).not.toHaveBeenCalled();
     expect(ask.mock.calls[0]?.[0]).toContain("unknown");

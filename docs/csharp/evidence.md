@@ -31,8 +31,8 @@ every path it writes into a run file is absolute.
 | `install-browser` | Installs the browser the run and parity commands drive; the installer's download progress goes to stderr, so stdout is only `{installed}`. Ctrl-C returns at once (a download already running finishes in Playwright's driver) | 0 · 4 |
 
 `--lock-timeout` is whole seconds, 0 to 86400 (default 120; 0 tries once), and applies to each lock in turn, so exit 75 can come after up to twice the value; anything else is a usage error. A `--baseline` that doesn't exist is AW-EVIDENCE-010 (exit 1) before any lock is taken; one that exists but doesn't decode as a PNG leaves the verdict `unchecked` (never `unchanged`). `--host` takes a bare origin: `http://localhost:<port>`
-or `http://127.0.0.1:<port>` (local: no extra flag), or `https://pr-<n>.vitalize.build` with `--allow-preview-host`
-(the host guard below). Without `--host` the binary drives `http://localhost:3000`.
+or `http://127.0.0.1:<port>` (local: no extra flag), or an https preview host matching `UI_EVIDENCE_PREVIEW_HOST_PATTERN`
+with `--allow-preview-host` (the host guard below). Without `--host` the binary drives `http://localhost:3000`.
 
 ### Exit codes
 
@@ -79,7 +79,7 @@ rule is listed, joined by `; `.
 | Key | Type | Required | Holds and rules |
 |---|---|---|---|
 | `route` | string | yes | the route under test; recorded in `summary.json` (the run navigates only through `goto` steps) |
-| `role` | `manager` \| `staff` \| `central-staffer` \| `super-admin` | yes | the app role; recorded in `summary.json` |
+| `role` | lower-case kebab-case string (the app's own role name, e.g. `admin`) | yes | the app role; recorded in `summary.json`, not interpreted |
 | `viewports` | (`desktop` \| `phone`)[] | yes | at least one; every step runs in each (desktop 1280x800, phone 375x812) |
 | `steps` | step[] | yes | at least one, run in order (below) |
 | `planning` | object \| null | no | the planner's own model call, recorded as the first `invocations[]` entry: `pr` (string \| null, also `summary.json`'s `pr`), `model` (string \| null), `elapsedMs`, `inputTokens`, `outputTokens` (integer \| null each, not negative; null is unknown, never zero) |
@@ -172,7 +172,7 @@ Scorer and bugfix-state read these files after their own ports; the fields they 
 | `runInstance` | string | this invocation: a new UUID every time, so a rerun in the same directory has another |
 | `startedAt`, `finishedAt` † | string (UTC `O`) | when the run started and ended |
 | `route` | string | the script's route |
-| `role` | `manager` \| `staff` \| `central-staffer` \| `super-admin` | the script's role |
+| `role` | string | the script's role |
 | `host` | string | the origin driven |
 | `appBuild` † | string \| null | `--app-build` (the commit under test, when verified) |
 | `fixtures` | string \| null | `--fixtures` |
@@ -272,8 +272,8 @@ contract.
 |---|---|---|
 | none | `http://localhost:3000` (local) | none |
 | `http://localhost:<port>`, `http://127.0.0.1:<port>` (bare origin) | local | none |
-| `https://pr-<digits>.vitalize.build` (bare origin) with `--allow-preview-host` | preview | write-looking steps refused without `--allow-writes` |
-| anything else (dev, staging, prod, a path, a query, credentials in the URL) | refused, AW-EVIDENCE-004 | — |
+| `https://<host>` (bare origin) whose whole hostname matches `UI_EVIDENCE_PREVIEW_HOST_PATTERN`, with `--allow-preview-host` | preview | write-looking steps refused without `--allow-writes` |
+| anything else (dev, staging, prod, a path, a query, credentials in the URL; every non-loopback host when no pattern is configured, or the pattern doesn't compile) | refused, AW-EVIDENCE-004 | — |
 
 Every `goto` target must be a path on the host (one leading `/`); a step that leaves the host is refused
 (AW-EVIDENCE-005), and the browser aborts any off-origin navigation it is asked to make. Playwright never routes a
@@ -302,14 +302,21 @@ These are read by Infrastructure's `EnvironmentEvidenceSettings` and lock settin
 | `UI_EVIDENCE_USER_AGENT` | `run`, `parity`: the user agent to present instead of desktop Chrome at the browser's build |
 | `AW_VISUAL_MODEL` | `run`: the model label in the verdict-cache key (default `judge-default`) |
 | `UI_EVIDENCE_APP_TITLE`, `UI_EVIDENCE_CONFIG` | `doctor`: the title the app on :3000 must show at `/login`; else the `NAME=value` env file `UI_EVIDENCE_CONFIG` names (an `export ` prefix and quotes are allowed). Neither set (or an unreadable file) is itself a doctor failure: `the app title is not set: set …` |
+| `UI_EVIDENCE_PREVIEW_HOST_PATTERN` | `run`, `parity`: the regex a preview `--host`'s whole hostname must match (e.g. `pr-[0-9]+\.preview\.example\.com`; write it so dev, staging and prod never match). Unset: every non-loopback host is refused |
+| `UI_EVIDENCE_API_PORT` | `doctor`: a localhost port (an API server) that must accept connections, 1-65535. Unset: not checked |
+| `UI_EVIDENCE_DB_CONTAINER`, `UI_EVIDENCE_DB_USER` | `doctor`, `provenance`: the Docker container running the local Postgres and its user (default `postgres`). No container: `doctor` skips the database and `provenance` is `unknown` |
+| `UI_EVIDENCE_SEED_TABLE` | `provenance`: the `[schema.]table` whose `email` column is read (a plain identifier only, since it is spliced into the SQL; anything else counts as unset). Unset: `unknown` |
 | `UI_EVIDENCE_SEED_DOMAINS`, `UI_EVIDENCE_SEED_EMAIL_PATTERN` | `provenance`: the seed policy (defaults match only `example.com`, so an unconfigured install stays `unknown`) |
 | `AW_QA_STACK_LOCK`, `AW_HEAVY_JOB_LOCK`, `AW_HEAVY_SLOTS`, `AW_HEAVY_LOCK_HELD`, `AW_STATE_DIR` | the lock adapter |
 | the manifest's `login.emailEnv` / `login.passwordEnv` | `parity` sign-in |
 
-`doctor` checks `http://localhost:3000/login`'s title, `docker exec postgres_container pg_isready -U postgres`, and a
-TCP connect to `localhost:5002`. `provenance` runs `docker exec postgres_container psql` with the seed pattern passed as
-a psql variable, never interpolated into the SQL; a failed query is `unknown` with the reason. A profile row with a
-NULL email reads as an empty email (not on a seed domain), so it makes the data `unknown` rather than being skipped.
+`doctor` checks `http://localhost:3000/login`'s title, `docker exec <container> pg_isready -U <user>` when a container is
+configured, and a TCP connect to `localhost:<UI_EVIDENCE_API_PORT>` when a port is. `provenance` runs
+`docker exec <container> psql` against the seed table with the seed pattern passed as a psql variable, never
+interpolated into the SQL; a failed query (or no container or table configured) is `unknown` with the reason. A row
+with a NULL email reads as an empty email (not on a seed domain), so it makes the data `unknown` rather than being
+skipped. The TypeScript skill also reads these from a committed `deployment.env` next to its SKILL.md; the binary
+reads the environment only until the switch.
 
 ## AOT scope
 
@@ -331,7 +338,7 @@ move behind an AOT host if the browser adapter ever allowed it.
 | `IJudge` | `UnavailableJudge` (CLI adapter blocked, above) | `FakeJudge` |
 | `IStackProbe`, `IProvenanceQuery` | `ProcessStackProbe`, `DockerPsqlProvenance` | `FakeStackProbe`, `FakeProvenanceQuery` |
 | `ISecretsSource` (credentials by the name the manifest gives) | `EnvironmentSecrets` | `FakeSecrets` |
-| `IEvidenceSettings` (user agent, visual model, seed policy, app title) | `EnvironmentEvidenceSettings` | `FakeEvidenceSettings` |
+| `IEvidenceSettings` (user agent, visual model, preview host pattern, API port, seed policy, app title) | `EnvironmentEvidenceSettings` | `FakeEvidenceSettings` |
 | `IIdGenerator` (Kernel; the run instance) | `RandomIds` | `SequentialIds` |
 
 Each port with behaviour to pin has a contract suite in `tests/Aw.Evidence.Testing` that the fake and the adapter both

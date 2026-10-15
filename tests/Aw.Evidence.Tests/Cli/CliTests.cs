@@ -47,7 +47,7 @@ public sealed class CliTests : IDisposable
     {
         var script = SaveScript();
 
-        var (exit, _, error) = _work.Run("run", script, "run-1", "--host", "https://pr-12.vitalize.build", "--allow-preview-host");
+        var (exit, _, error) = _work.Run("run", script, "run-1", "--host", "https://pr-12.preview.example.com", "--allow-preview-host");
 
         Assert.Equal(1, exit);
         Assert.StartsWith("ui-evidence: AW-EVIDENCE-005 ", error, StringComparison.Ordinal);
@@ -56,8 +56,8 @@ public sealed class CliTests : IDisposable
     }
 
     [Theory]
-    [InlineData("https://app.vitalize.build")]
-    [InlineData("https://pr-12.vitalize.build")]
+    [InlineData("https://app.preview.example.com")]
+    [InlineData("https://pr-12.preview.example.com")]
     [InlineData("http://localhost:3000/login")]
     public void A_host_that_is_not_local_or_an_allowed_preview_is_refused_with_exit_1(string host)
     {
@@ -113,7 +113,7 @@ public sealed class CliTests : IDisposable
     [Fact]
     public void Publish_plan_downgrades_a_non_local_host_to_unknown_provenance()
     {
-        _ = _work.Write("r1/summary.json", TestJson.Write(A.RunSummary().OnHost("https://pr-12.vitalize.build").Build()));
+        _ = _work.Write("r1/summary.json", TestJson.Write(A.RunSummary().OnHost("https://pr-12.preview.example.com").Build()));
 
         var (exit, output, _) = _work.Run("publish-plan", "r1", "--provenance", "seeded", "--linear-issue", "FRN-1");
 

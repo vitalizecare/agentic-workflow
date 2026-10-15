@@ -74,7 +74,7 @@ public sealed class RunSummaryBuilder
             _ = WithStep(StepStatus.Passed);
         }
 
-        return new(RunSummary.SchemaName, RunId.From("run-1"), RunInstanceId.From("instance-1"), _start, _start.AddSeconds(30), "/hospitals", UserRole.Manager, _host,
+        return new(RunSummary.SchemaName, RunId.From("run-1"), RunInstanceId.From("instance-1"), _start, _start.AddSeconds(30), "/hospitals", "manager", _host,
             AppBuild: null, Fixtures: null, new string('a', 64), Pr: null, [ViewportKind.Desktop], [.. _steps], _visual, [.. _lint], [],
             Planning: null, _evidence);
     }

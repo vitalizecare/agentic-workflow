@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildParityEntry } from "../src/parity.js";
 import { parityMain, parseFlags, type ParityDeps } from "../src/parity-cli.js";
 import type { ParitySummary } from "../src/parity-publish.js";
+
+// Preview hosts are deployment config; these tests use a fictional one.
+beforeEach(() => vi.stubEnv("UI_EVIDENCE_PREVIEW_HOST_PATTERN", "pr-[0-9]+\\.preview\\.example\\.com"));
+afterEach(() => vi.unstubAllEnvs());
 
 const manifest = (steps?: unknown[]) =>
   JSON.stringify({ route: "/x", ready: { text: "Hours" }, frames: [{ name: "A", designPng: "d.png", designRegion: { x: 0, y: 0, w: 2, h: 2 }, anchor: { testId: "card" }, steps }] });
@@ -46,8 +50,8 @@ describe("parity", () => {
   it("passes a preview host, build and DB provenance through", async () => {
     const run = vi.fn().mockResolvedValue(summary());
     const { d } = deps({ run });
-    await parityMain(["parity", "m.json", "r", "--host", "https://pr-9.vitalize.build", "--allow-preview-host", "--app-build", "abc", "--db-provenance", "seeded"], d);
-    expect(run).toHaveBeenCalledWith(expect.anything(), "r", { host: "https://pr-9.vitalize.build", hostKind: "preview", appBuild: "abc", dbProvenance: "seeded" });
+    await parityMain(["parity", "m.json", "r", "--host", "https://pr-9.preview.example.com", "--allow-preview-host", "--app-build", "abc", "--db-provenance", "seeded"], d);
+    expect(run).toHaveBeenCalledWith(expect.anything(), "r", { host: "https://pr-9.preview.example.com", hostKind: "preview", appBuild: "abc", dbProvenance: "seeded" });
   });
 
   it("exits 2 and reports each failed geometry check", async () => {
@@ -88,8 +92,8 @@ describe("parity", () => {
   it("refuses a non-preview host, a host without the opt-in, and write-looking steps — before running", async () => {
     const run = vi.fn();
     for (const [argv, why] of [
-      [["parity", "m.json", "r", "--host", "https://app.vitalize.build", "--allow-preview-host"], "preview host"],
-      [["parity", "m.json", "r", "--host", "https://pr-1.vitalize.build"], "--allow-preview-host"],
+      [["parity", "m.json", "r", "--host", "https://app.preview.example.com", "--allow-preview-host"], "preview host"],
+      [["parity", "m.json", "r", "--host", "https://pr-1.preview.example.com"], "--allow-preview-host"],
     ] as const) {
       const { d, err } = deps({ run });
       expect(await parityMain([...argv], d)).toBe(1);
@@ -99,7 +103,7 @@ describe("parity", () => {
     expect(await parityMain(["parity", "m.json", "r"], writes.d)).toBe(1);
     expect(writes.err[0]).toContain("--allow-writes");
     expect(run).not.toHaveBeenCalled();
-    const escape = deps({ run, readFile: () => manifest([{ action: "goto", target: "@app.vitalize.build/admin", expectedState: { kind: "url-path", path: "/" } }]) });
+    const escape = deps({ run, readFile: () => manifest([{ action: "goto", target: "@app.preview.example.com/admin", expectedState: { kind: "url-path", path: "/" } }]) });
     expect(await parityMain(["parity", "m.json", "r", "--allow-writes"], escape.d)).toBe(1);
     expect(escape.err[0]).toContain("goto targets must be paths");
     const allowed = deps({ readFile: () => manifest([click("update-hospital-button")]) });
