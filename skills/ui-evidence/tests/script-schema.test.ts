@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeExpectedState, parseUiScript } from "../src/script-schema.js";
+import { describeExpectedState, describeStep, parseUiScript } from "../src/script-schema.js";
 
 const exp = { kind: "testid-visible", testId: "y" };
 const scriptWith = (extra: object, steps: unknown[] = [{ action: "goto", target: "/x", expectedState: exp }]): unknown => ({ route: "/", role: "manager", viewports: ["desktop"], steps, ...extra });
@@ -96,7 +96,50 @@ describe("parseUiScript", () => {
     expect(describeExpectedState({ kind: "text-visible", text: "a" })).toContain("visible");
     expect(describeExpectedState({ kind: "text-absent", text: "a" })).toContain("absent");
     expect(describeExpectedState({ kind: "testid-visible", testId: "t" })).toContain("t");
+    expect(describeExpectedState({ kind: "testid-absent", testId: "t" })).toBe("element t absent");
     expect(describeExpectedState({ kind: "url-path", path: "/p" })).toContain("/p");
     expect(describeExpectedState({ kind: "input-value", testId: "t", value: "v" })).toContain('"v"');
   });
 });
+
+describe("drag steps and localStorage", () => {
+  const base = { route: "/x", role: "manager", viewports: ["desktop"] } as const;
+  const dropped = { kind: "testid-absent", testId: "drag-overlay" } as const;
+
+  it("accepts a drag with only target and to; offsets and holdAlt are optional", () => {
+    expect(parseUiScript({ ...base, steps: [{ action: "drag", target: "shift-1", to: "day-2", expectedState: dropped }] })).not.toHaveProperty("error");
+    const full = parseUiScript({ ...base, steps: [{ action: "drag", target: "shift-1", to: "day-2", grabOffset: { x: 4, y: 8 }, dropOffset: { x: 10, y: 10 }, holdAlt: true, expectedState: dropped }] });
+    expect(full).not.toHaveProperty("error");
+  });
+
+  it("rejects a drag without a destination or with a malformed offset", () => {
+    expect(parseUiScript({ ...base, steps: [{ action: "drag", target: "shift-1", expectedState: dropped }] })).toHaveProperty("error");
+    expect(parseUiScript({ ...base, steps: [{ action: "drag", target: "shift-1", to: "", expectedState: dropped }] })).toHaveProperty("error");
+    expect(parseUiScript({ ...base, steps: [{ action: "drag", target: "shift-1", to: "day-2", grabOffset: { x: 4 }, expectedState: dropped }] })).toHaveProperty("error");
+  });
+
+  it("accepts string localStorage entries and rejects non-string values", () => {
+    const steps = [{ action: "goto", target: "/x", expectedState: { kind: "url-path", path: "/x" } }];
+    expect(parseUiScript({ ...base, steps, localStorage: { "feature-flag:multi-day-drag": "true" } })).toMatchObject({ localStorage: { "feature-flag:multi-day-drag": "true" } });
+    expect(parseUiScript({ ...base, steps, localStorage: { flag: true } })).toHaveProperty("error");
+  });
+
+  it("labels a drag with its destination", () => {
+    expect(describeStep({ action: "drag", target: "shift-1", to: "day-2", expectedState: dropped })).toBe("drag shift-1 → day-2");
+    expect(describeStep({ action: "click", target: "save", expectedState: dropped })).toBe("click save");
+  });
+});
+
+describe("login", () => {
+  const base = { route: "/", role: "manager", viewports: ["desktop"], steps: [{ action: "goto", target: "/", expectedState: { kind: "url-path", path: "/" } }] };
+  const login = { emailEnv: "ADMIN_EMAIL", passwordEnv: "ADMIN_PASSWORD", emailSelector: "input[name=contact]", passwordSelector: "input[name=password]", nextSelector: "[data-testid=login-button]", submitSelector: "button[type=submit]" };
+  it("accepts env var names and selectors, defaulting the login path", () => {
+    const parsed = parseUiScript({ ...base, login });
+    expect("error" in parsed ? null : parsed.login?.loginPath).toBe("/login");
+  });
+  it("rejects literal credentials and lower-case env var names", () => {
+    expect("error" in parseUiScript({ ...base, login: { ...login, password: "hunter2" } })).toBe(true);
+    expect("error" in parseUiScript({ ...base, login: { ...login, emailEnv: "admin_email" } })).toBe(true);
+  });
+});
+

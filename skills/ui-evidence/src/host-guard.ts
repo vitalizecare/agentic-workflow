@@ -1,6 +1,11 @@
 // Guard rails for running against a host other than localhost:3000. Pure
 // functions: the CLI and the browser drivers call them before anything
 // touches the network.
+//
+// Two overrides exist. A git worktree's own local stack (web-app's
+// `scripts/worktree.sh` slots) serves the web app on localhost:3000 + 10 * N
+// for slot N in 1-15; that is still this machine and seeded data, so it stays
+// a "local" run. A PR living preview (UI_EVIDENCE_PREVIEW_HOST_PATTERN) is "preview".
 import type { ScriptStep } from "./script-schema.js";
 
 export const DEFAULT_HOST = "http://localhost:3000";
@@ -21,6 +26,26 @@ function previewHostPattern(env: Record<string, string | undefined>): RegExp | {
   }
 }
 
+// web-app's worktree slots: slot N (1-15) serves the web app on 3000 + 10 * N.
+export const MAX_WORKTREE_SLOT = 15;
+
+/** The web port of worktree slot `slot`, or null outside 1-15. */
+export function worktreeSlotWebPort(slot: number): number | null {
+  return Number.isInteger(slot) && slot >= 1 && slot <= MAX_WORKTREE_SLOT ? 3000 + 10 * slot : null;
+}
+
+/** True for http://localhost:<slot web port> with nothing else in the URL. */
+function isWorktreeSlotHost(url: URL): boolean {
+  const port = Number(url.port);
+  return (
+    url.protocol === "http:" &&
+    url.hostname === "localhost" &&
+    port > 3000 &&
+    (port - 3000) % 10 === 0 &&
+    worktreeSlotWebPort((port - 3000) / 10) === port
+  );
+}
+
 export type HostResult = { ok: true; host: string; kind: "local" | "preview" } | { ok: false; error: string };
 
 export interface HostFlags {
@@ -36,8 +61,14 @@ export function resolveHost(flags: HostFlags, env: Record<string, string | undef
   } catch {
     return { ok: false, error: `--host is not a URL: ${flags.host}` };
   }
-  if (url.protocol !== "https:") return { ok: false, error: "--host must be https" };
   if (url.username !== "" || url.password !== "") return { ok: false, error: "--host must not carry credentials" };
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+    if ((url.pathname !== "/" && url.pathname !== "") || url.search !== "" || url.hash !== "") return { ok: false, error: "--host must be a bare origin (no path, query or fragment)" };
+    if (url.hostname !== "localhost") return { ok: false, error: "--host must use localhost, not 127.0.0.1 (the api-server CORS allowlist names localhost)" };
+    if (!isWorktreeSlotHost(url)) return { ok: false, error: `--host ${url.origin} is not a worktree slot web port (http://localhost:3000 + 10 * N, N 1-${MAX_WORKTREE_SLOT}); omit --host for localhost:3000` };
+    return { ok: true, host: url.origin, kind: "local" };
+  }
+  if (url.protocol !== "https:") return { ok: false, error: "--host must be https" };
   const preview = previewHostPattern(env);
   if ("error" in preview) return { ok: false, error: preview.error };
   if (!preview.test(url.hostname)) return { ok: false, error: `--host ${url.hostname} is not a preview host (${PREVIEW_HOST_PATTERN_VARIABLE}); dev and prod hosts are refused` };
@@ -82,9 +113,13 @@ export function isSameOriginPath(target: string): boolean {
   return target.startsWith("/") && !target.startsWith("//") && !target.includes("\\");
 }
 
-/** Best-effort: click steps (and goto paths) whose words read like a save/submit/update/delete control. */
+/**
+ * Best-effort: click steps (and goto paths) whose words read like a save/submit/update/delete control.
+ * Every drag counts as a write: dropping moves data whatever the test ids say.
+ */
 export function findWriteSteps(steps: ScriptStep[]): Array<{ index: number; target: string }> {
   return steps.flatMap((s, index) => {
+    if (s.action === "drag") return [{ index, target: `${s.target} → ${s.to}` }];
     const label = s.action === "click" ? s.target : s.action === "goto" ? (s.target.split("?")[0] as string) : null;
     return label !== null && words(label).some(isWriteWord) ? [{ index, target: s.target }] : [];
   });

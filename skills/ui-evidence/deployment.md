@@ -25,3 +25,15 @@ this page covers what settings can't express.
   desktop-Chrome user agent already passes it; don't set `UI_EVIDENCE_USER_AGENT` to a headless one.
 - **C# binary** (`src/Evidence`, not installed yet): it reads the environment only. Export the `deployment.env`
   values, for example `set -a; . skills/ui-evidence/deployment.env; set +a`, before calling it.
+
+## Worktree stacks (web-app `scripts/worktree.sh` slots)
+
+In a web-app git worktree, use that worktree's own slot stack, not `:3000`. `--host http://localhost:30N0` targets slot N.
+
+The main checkout's stack owns `localhost:3000` and `:5002`. Evidence must come from the code under review, so when you work in a web-app git worktree, never drive `:3000` (the doctor passes there, but that is the main checkout's code). Give the worktree its own stack instead:
+
+1. From the worktree: `bash scripts/worktree.sh claim` (writes the gitignored `.env.worktree` with `WORKTREE_SLOT=N`, the lowest free slot 1-15), then `bash scripts/worktree.sh prepare` (installs deps, creates, migrates and seeds database `wt_N` in the shared `postgres_container`, and prints that slot's seeded logins). `bash scripts/worktree.sh info` prints the ports.
+2. Start the slot's stack from the worktree: `printf '\n' | nohup bun dev:local > /tmp/wt<N>-dev-local.log 2>&1 &` (the newline answers its "Press Enter" prompt). Slot N serves web on `localhost:3000+10N`, the API on `:5002+10N` and cluster runners from `8080+10N`. Keep the PID and kill only it when done; `bash scripts/worktree.sh release` drops the slot's database and frees it.
+3. Run the doctor **from the worktree** (or set `UI_EVIDENCE_WORKTREE=<path>`). It reads `.env.worktree`, probes the slot's ports and database, refuses a slot whose ports are served from another checkout, and prints the `--host` and database to use.
+4. Run the script with `--host http://localhost:3000+10N` (for example `--host http://localhost:3020`). A slot host is a **local** run: no `--allow-preview-host`, no write guard, the same as `:3000`. Only `http://localhost:<3000+10N>` for N 1-15 is accepted, as a bare origin; `127.0.0.1` is refused because the api-server CORS allowlist names `localhost`.
+5. Check provenance against the slot's database: `docker exec postgres_container psql -U postgres -d wt_N …`, not `-d postgres`. Use the seeded logins `prepare` (and each `dev:local` start, which re-seeds the slot) prints, not ones from the main database.
