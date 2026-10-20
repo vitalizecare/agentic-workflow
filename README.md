@@ -155,6 +155,7 @@ The setup script:
 - Builds the Serena Docker images (base TS/Python image; opt-in C# and Swift extensions) and installs the `serena-docker` wrapper to `~/.local/bin/`
 - Registers the MCP servers (`serena`, `prism-mcp`, and `xcodebuildmcp` on macOS) with each selected provider, and removes old `agentic-bridge` and `headroom` registrations and the leftover `mcp-bridge/` build output (the MCP bridge was retired)
 - Configures `prism-mcp` (persistent memory, downloaded on first use) with its Mind Palace dashboard at `http://localhost:7180` (`PRISM_DASHBOARD_PORT`). The `prism-context.sh` session-start hook warns if the dashboard is unreachable; `/prismStatus` runs a full health check
+- Optional [Beacon session history](docs/beacon.md): after installing Beacon, run `scripts/install-beacon.sh --providers claude,codex,cursor` for local capture and the `aw-beacon` MCP server. This add-on preserves Prism's handoffs and is separate from normal setup.
 - Installs rtk
 - **Claude Code only:** copies `settings.json`, installs the statusline and shell integration, and adds plugin marketplaces and plugins
 
