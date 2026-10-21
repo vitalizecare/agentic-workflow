@@ -73,6 +73,8 @@ describe("cli main", () => {
 
     it("runs a worktree slot host as local: no opt-in, and its steps are not write-guarded", async () => {
       const run = vi.fn().mockResolvedValue(summary("passed"));
+      vi.stubEnv("UI_EVIDENCE_SLOT_COUNT", "15");
+      vi.stubEnv("UI_EVIDENCE_SLOT_PORT_STEP", "10");
       expect(await main(["s.json", "r", "--host", "http://localhost:3020"], deps({ run, readFile: () => clickScript("save-button") }).d)).toBe(0);
       expect(run).toHaveBeenCalledWith(expect.anything(), "r", undefined, expect.objectContaining({ host: "http://localhost:3020" }));
     });

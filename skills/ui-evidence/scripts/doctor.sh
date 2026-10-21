@@ -14,13 +14,18 @@
 #   UI_EVIDENCE_DB_USER       optional: its user (default postgres)
 #   UI_EVIDENCE_API_PORT      optional: a localhost port that must accept connections
 #
-# Worktree mode: run from inside a git worktree that has claimed a stack slot
-# (its `.env.worktree` holds WORKTREE_SLOT=N, 1-15), or set
+# Worktree mode, when the deployment configures slots (all four required
+# together, UI_EVIDENCE_SLOT_DATABASE optional):
+#   UI_EVIDENCE_SLOT_FILE       the env file in a worktree's root that holds its slot
+#   UI_EVIDENCE_SLOT_KEY        the NAME in that file whose value is the slot N
+#   UI_EVIDENCE_SLOT_COUNT      the highest slot
+#   UI_EVIDENCE_SLOT_PORT_STEP  slot N serves web on 3000+STEP*N, API on UI_EVIDENCE_API_PORT+STEP*N
+#   UI_EVIDENCE_SLOT_DATABASE   the slot's database name, `{slot}` replaced by N
+# Run from inside a git worktree whose slot file names its slot, or set
 # UI_EVIDENCE_WORKTREE=<worktree path>. The checks then target that slot's
-# stack: web localhost:3000+10N, API UI_EVIDENCE_API_PORT+10N, database wt_N in
-# UI_EVIDENCE_DB_CONTAINER, and both ports must be served from that worktree (a
-# slot owned by another checkout is foreign). On success it prints the --host
-# to pass to the runner and the database to check.
+# stack, and both ports must be served from that worktree (a slot owned by
+# another checkout is foreign). On success it prints the --host to pass to the
+# runner and the database to check.
 set -uo pipefail
 FAILS=()
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -60,22 +65,44 @@ if [ -z "${UI_EVIDENCE_APP_TITLE:-}" ]; then
   exit 1
 fi
 
-WORKTREE="${UI_EVIDENCE_WORKTREE:-$(git rev-parse --show-toplevel 2>/dev/null || true)}"
 SLOT=0
-if [ -n "$WORKTREE" ] && [ -f "$WORKTREE/.env.worktree" ]; then
-  SLOT="$(sed -n 's/^WORKTREE_SLOT=\([0-9][0-9]*\)$/\1/p' "$WORKTREE/.env.worktree")"
-  if [ -z "$SLOT" ] || [ "$SLOT" -lt 1 ] || [ "$SLOT" -gt 15 ]; then
-    printf 'ui-evidence doctor: %s/.env.worktree has no WORKTREE_SLOT between 1 and 15\n' "$WORKTREE"
+STEP=0
+if [ -n "${UI_EVIDENCE_SLOT_FILE:-}" ]; then
+  SLOT_KEY="${UI_EVIDENCE_SLOT_KEY:-}"
+  SLOT_COUNT="${UI_EVIDENCE_SLOT_COUNT:-}"
+  STEP="${UI_EVIDENCE_SLOT_PORT_STEP:-}"
+  if ! [[ "$SLOT_KEY" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && "$SLOT_COUNT" =~ ^[1-9][0-9]*$ && "$STEP" =~ ^[1-9][0-9]*$ ]]; then
+    printf 'ui-evidence doctor: UI_EVIDENCE_SLOT_FILE is set, so UI_EVIDENCE_SLOT_KEY must be a variable name and UI_EVIDENCE_SLOT_COUNT and UI_EVIDENCE_SLOT_PORT_STEP positive integers (see SKILL.md "Worktree stacks")\n'
+    exit 1
+  fi
+  WORKTREE="${UI_EVIDENCE_WORKTREE:-$(git rev-parse --show-toplevel 2>/dev/null || true)}"
+  SLOT_PATH="$WORKTREE/$UI_EVIDENCE_SLOT_FILE"
+  if [ -n "$WORKTREE" ] && [ -f "$SLOT_PATH" ]; then
+    SLOT="$(sed -n "s/^${SLOT_KEY}=\([0-9][0-9]*\)\$/\1/p" "$SLOT_PATH" | head -1)"
+    if [ -z "$SLOT" ] || [ "$SLOT" -lt 1 ] || [ "$SLOT" -gt "$SLOT_COUNT" ]; then
+      printf 'ui-evidence doctor: %s has no %s between 1 and %s\n' "$SLOT_PATH" "$SLOT_KEY" "$SLOT_COUNT"
+      exit 1
+    fi
+  elif [ -n "${UI_EVIDENCE_WORKTREE:-}" ]; then
+    printf 'ui-evidence doctor: UI_EVIDENCE_WORKTREE=%s has no %s — claim a stack slot there first\n' "$UI_EVIDENCE_WORKTREE" "$UI_EVIDENCE_SLOT_FILE"
     exit 1
   fi
 elif [ -n "${UI_EVIDENCE_WORKTREE:-}" ]; then
-  printf 'ui-evidence doctor: UI_EVIDENCE_WORKTREE=%s has no .env.worktree — claim a stack slot there first\n' "$UI_EVIDENCE_WORKTREE"
+  printf 'ui-evidence doctor: UI_EVIDENCE_WORKTREE is set but no worktree slots are configured (set UI_EVIDENCE_SLOT_FILE; see SKILL.md "Worktree stacks")\n'
   exit 1
 fi
-WEB_PORT=$((3000 + SLOT * 10))
+WEB_PORT=$((3000 + SLOT * STEP))
 API_PORT=""
-if [ -n "${UI_EVIDENCE_API_PORT:-}" ]; then API_PORT=$((UI_EVIDENCE_API_PORT + SLOT * 10)); fi
-if [ "$SLOT" -eq 0 ]; then DATABASE="postgres"; else DATABASE="wt_${SLOT}"; fi
+if [ -n "${UI_EVIDENCE_API_PORT:-}" ]; then API_PORT=$((UI_EVIDENCE_API_PORT + SLOT * STEP)); fi
+DATABASE=""
+if [ "$SLOT" -ne 0 ] && [ -n "${UI_EVIDENCE_SLOT_DATABASE:-}" ]; then
+  DATABASE="${UI_EVIDENCE_SLOT_DATABASE//\{slot\}/$SLOT}"
+  # It goes into a SQL literal below.
+  if ! [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]]; then
+    printf 'ui-evidence doctor: UI_EVIDENCE_SLOT_DATABASE must name a database of letters, digits and _ (with {slot})\n'
+    exit 1
+  fi
+fi
 
 LOGIN_HTML="$(curl -s --max-time 5 "http://localhost:${WEB_PORT}/login" 2>/dev/null || true)"
 if ! printf '%s' "$LOGIN_HTML" | grep -q "<title>${UI_EVIDENCE_APP_TITLE}</title>"; then
@@ -86,7 +113,7 @@ DB_USER="${UI_EVIDENCE_DB_USER:-postgres}"
 if [ -n "${UI_EVIDENCE_DB_CONTAINER:-}" ]; then
   if ! docker exec "$UI_EVIDENCE_DB_CONTAINER" pg_isready -U "$DB_USER" > /dev/null 2>&1; then
     FAILS+=("postgres in container $UI_EVIDENCE_DB_CONTAINER is not ready")
-  elif [ "$SLOT" -ne 0 ] && [ "$(docker exec "$UI_EVIDENCE_DB_CONTAINER" psql -U "$DB_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '${DATABASE}'" 2>/dev/null)" != "1" ]; then
+  elif [ -n "$DATABASE" ] && [ "$(docker exec "$UI_EVIDENCE_DB_CONTAINER" psql -U "$DB_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '${DATABASE}'" 2>/dev/null)" != "1" ]; then
     FAILS+=("database ${DATABASE} does not exist in $UI_EVIDENCE_DB_CONTAINER — prepare the slot's database in ${WORKTREE}")
   fi
 fi
@@ -120,6 +147,6 @@ if [ "$SLOT" -eq 0 ]; then
 else
   echo "ui-evidence doctor: healthy (worktree slot ${SLOT}: ${WORKTREE})"
   echo "  runner:    --host http://localhost:${WEB_PORT}"
-  [ -n "${UI_EVIDENCE_DB_CONTAINER:-}" ] && echo "  database:  ${DATABASE} (docker exec ${UI_EVIDENCE_DB_CONTAINER} psql -U ${DB_USER} -d ${DATABASE})"
+  [ -n "${UI_EVIDENCE_DB_CONTAINER:-}" ] && [ -n "$DATABASE" ] && echo "  database:  ${DATABASE} (docker exec ${UI_EVIDENCE_DB_CONTAINER} psql -U ${DB_USER} -d ${DATABASE})"
 fi
 exit 0

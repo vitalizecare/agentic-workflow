@@ -113,7 +113,7 @@ describe("parseUiScript", () => {
 });
 
 describe("drag steps and localStorage", () => {
-  const base = { route: "/x", role: "manager", viewports: ["desktop"] } as const;
+  const base = { route: "/x", role: "admin", viewports: ["desktop"] } as const;
   const dropped = { kind: "testid-absent", testId: "drag-overlay" } as const;
 
   it("accepts a drag with only target and to; offsets and holdAlt are optional", () => {
@@ -141,7 +141,7 @@ describe("drag steps and localStorage", () => {
 });
 
 describe("login", () => {
-  const base = { route: "/", role: "manager", viewports: ["desktop"], steps: [{ action: "goto", target: "/", expectedState: { kind: "url-path", path: "/" } }] };
+  const base = { route: "/", role: "admin", viewports: ["desktop"], steps: [{ action: "goto", target: "/", expectedState: { kind: "url-path", path: "/" } }] };
   const login = { emailEnv: "ADMIN_EMAIL", passwordEnv: "ADMIN_PASSWORD", emailSelector: "input[name=contact]", passwordSelector: "input[name=password]", nextSelector: "[data-testid=login-button]", submitSelector: "button[type=submit]" };
   it("accepts env var names and selectors, defaulting the login path", () => {
     const parsed = parseUiScript({ ...base, login });

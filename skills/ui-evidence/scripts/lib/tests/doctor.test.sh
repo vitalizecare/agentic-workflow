@@ -103,7 +103,7 @@ test_deployment_env_supplies_settings_and_local_file_and_environment_win() {
 # committed deployment defaults
 UI_EVIDENCE_APP_TITLE="Deployed App"
 export UI_EVIDENCE_DB_CONTAINER=deployed_db
-UI_EVIDENCE_API_PORT=5002
+UI_EVIDENCE_API_PORT=4100
 EOF
   printf 'UI_EVIDENCE_APP_TITLE='"'"'Local App'"'"'\n' > "$skill/.ui-evidence.local.env"
   out="$(run_doctor "$skill" "$bin_dir" UI_EVIDENCE_API_PORT="6000")" || { echo "FAIL: expected the local title to win over deployment.env, got: $out"; exit 1; }
@@ -121,7 +121,7 @@ test_settings_files_are_parsed_never_executed() {
   echo "PASS: test_settings_files_are_parsed_never_executed"
 }
 
-# Worktree mode: a fake worktree with .env.worktree, fake psql/lsof answers.
+# Worktree mode: a fake worktree with a slot file, fake psql/lsof answers.
 setup_worktree_fakes() {
   local bin_dir="$1" served_from="$2" db_exists="$3"
   setup_fake_bins "$bin_dir" "<title>TestApp</title>" 1 1
@@ -142,26 +142,30 @@ EOF
   chmod +x "$bin_dir/docker" "$bin_dir/curl" "$bin_dir/lsof"
 }
 
-# run_worktree_doctor <bin> <worktree>: a slot run with a configured database container and API port.
+# The slot settings a deployment would put in its deployment.env.
+SLOT_SETTINGS=(UI_EVIDENCE_SLOT_FILE=.stack-slot UI_EVIDENCE_SLOT_KEY=STACK_SLOT UI_EVIDENCE_SLOT_COUNT=15 UI_EVIDENCE_SLOT_PORT_STEP=10 "UI_EVIDENCE_SLOT_DATABASE=app_{slot}")
+
+# run_worktree_doctor <bin> <worktree> [VAR=value ...]: a slot run with a configured database container and API port.
 run_worktree_doctor() {
-  run_doctor "$(new_skill)" "$1" UI_EVIDENCE_APP_TITLE="TestApp" UI_EVIDENCE_DB_CONTAINER=db UI_EVIDENCE_API_PORT=5002 UI_EVIDENCE_WORKTREE="$2"
+  local bin_dir="$1" wt="$2"; shift 2
+  run_doctor "$(new_skill)" "$bin_dir" UI_EVIDENCE_APP_TITLE="TestApp" UI_EVIDENCE_DB_CONTAINER=db UI_EVIDENCE_API_PORT=4100 UI_EVIDENCE_WORKTREE="$wt" "${SLOT_SETTINGS[@]}" "$@"
 }
 
 test_worktree_slot_targets_its_own_ports_and_prints_host() {
   local bin_dir wt out; bin_dir="$(mktemp -d)"; wt="$(mktemp -d)"
-  echo "WORKTREE_SLOT=2" > "$wt/.env.worktree"
+  echo "STACK_SLOT=2" > "$wt/.stack-slot"
   setup_worktree_fakes "$bin_dir" "$wt/apps/web" 1
   out="$(run_worktree_doctor "$bin_dir" "$wt")" || { echo "FAIL: expected a healthy slot, got: $out"; exit 1; }
   has "localhost:3020/login" "$bin_dir/curl-calls" || { echo "FAIL: expected the slot's web port probed"; exit 1; }
-  has "^nc -z localhost 5022$" "$bin_dir/calls" || { echo "FAIL: expected the slot's API port (configured + 10N) probed, got: $(cat "$bin_dir/calls")"; exit 1; }
+  has "^nc -z localhost 4120$" "$bin_dir/calls" || { echo "FAIL: expected the slot's API port (configured + 10N) probed, got: $(cat "$bin_dir/calls")"; exit 1; }
   echo "$out" | has -- "--host http://localhost:3020" || { echo "FAIL: expected the runner host printed, got: $out"; exit 1; }
-  echo "$out" | has "wt_2" || { echo "FAIL: expected the slot database printed, got: $out"; exit 1; }
+  echo "$out" | has "app_2" || { echo "FAIL: expected the slot database printed, got: $out"; exit 1; }
   echo "PASS: test_worktree_slot_targets_its_own_ports_and_prints_host"
 }
 
 test_worktree_slot_served_by_another_checkout_is_refused() {
   local bin_dir wt out; bin_dir="$(mktemp -d)"; wt="$(mktemp -d)"
-  echo "WORKTREE_SLOT=2" > "$wt/.env.worktree"
+  echo "STACK_SLOT=2" > "$wt/.stack-slot"
   setup_worktree_fakes "$bin_dir" "/somewhere/else/apps/web" 1
   if out="$(run_worktree_doctor "$bin_dir" "$wt")"; then
     echo "FAIL: expected a refusal when the slot is served from another checkout"; exit 1
@@ -172,12 +176,12 @@ test_worktree_slot_served_by_another_checkout_is_refused() {
 
 test_worktree_slot_without_database_fails_with_reason() {
   local bin_dir wt out; bin_dir="$(mktemp -d)"; wt="$(mktemp -d)"
-  echo "WORKTREE_SLOT=2" > "$wt/.env.worktree"
+  echo "STACK_SLOT=2" > "$wt/.stack-slot"
   setup_worktree_fakes "$bin_dir" "$wt/apps/web" 0
   if out="$(run_worktree_doctor "$bin_dir" "$wt")"; then
-    echo "FAIL: expected non-zero when wt_2 does not exist"; exit 1
+    echo "FAIL: expected non-zero when app_2 does not exist"; exit 1
   fi
-  echo "$out" | has "wt_2" || { echo "FAIL: expected the missing database named, got: $out"; exit 1; }
+  echo "$out" | has "app_2" || { echo "FAIL: expected the missing database named, got: $out"; exit 1; }
   echo "PASS: test_worktree_slot_without_database_fails_with_reason"
 }
 
@@ -185,10 +189,35 @@ test_worktree_without_claimed_slot_fails_with_reason() {
   local bin_dir wt out; bin_dir="$(mktemp -d)"; wt="$(mktemp -d)"
   setup_worktree_fakes "$bin_dir" "$wt" 1
   if out="$(run_worktree_doctor "$bin_dir" "$wt")"; then
-    echo "FAIL: expected non-zero for a worktree with no .env.worktree"; exit 1
+    echo "FAIL: expected non-zero for a worktree with no slot file"; exit 1
   fi
   echo "$out" | has "claim a stack slot" || { echo "FAIL: expected the claim step named, got: $out"; exit 1; }
   echo "PASS: test_worktree_without_claimed_slot_fails_with_reason"
+}
+
+test_worktree_slot_follows_the_configured_step_without_a_database_check() {
+  local bin_dir wt out; bin_dir="$(mktemp -d)"; wt="$(mktemp -d)"
+  echo "STACK_SLOT=3" > "$wt/.stack-slot"
+  setup_worktree_fakes "$bin_dir" "$wt" 0
+  out="$(run_worktree_doctor "$bin_dir" "$wt" UI_EVIDENCE_SLOT_PORT_STEP=100 UI_EVIDENCE_SLOT_DATABASE=)" || { echo "FAIL: expected a healthy slot with no database configured, got: $out"; exit 1; }
+  has "localhost:3300/login" "$bin_dir/curl-calls" || { echo "FAIL: expected web port 3000 + 100 * 3 probed"; exit 1; }
+  if echo "$out" | has "database:"; then echo "FAIL: expected no database line without UI_EVIDENCE_SLOT_DATABASE, got: $out"; exit 1; fi
+  echo "PASS: test_worktree_slot_follows_the_configured_step_without_a_database_check"
+}
+
+test_worktree_mode_needs_configured_slots() {
+  local bin_dir wt out; bin_dir="$(mktemp -d)"; wt="$(mktemp -d)"
+  setup_worktree_fakes "$bin_dir" "$wt" 1
+  if out="$(run_doctor "$(new_skill)" "$bin_dir" UI_EVIDENCE_APP_TITLE="TestApp" UI_EVIDENCE_WORKTREE="$wt")"; then
+    echo "FAIL: expected non-zero for UI_EVIDENCE_WORKTREE with no slots configured"; exit 1
+  fi
+  echo "$out" | has "no worktree slots are configured" || { echo "FAIL: expected the missing slot settings named, got: $out"; exit 1; }
+  if out="$(run_worktree_doctor "$bin_dir" "$wt" UI_EVIDENCE_SLOT_KEY=)"; then echo "FAIL: expected non-zero with UI_EVIDENCE_SLOT_KEY unset"; exit 1; fi
+  echo "$out" | has "UI_EVIDENCE_SLOT_KEY must be a variable name" || { echo "FAIL: expected the missing key named, got: $out"; exit 1; }
+  echo "STACK_SLOT=2" > "$wt/.stack-slot"
+  if out="$(run_worktree_doctor "$bin_dir" "$wt" "UI_EVIDENCE_SLOT_DATABASE=x'; drop{slot}")"; then echo "FAIL: expected a refused database name"; exit 1; fi
+  echo "$out" | has "UI_EVIDENCE_SLOT_DATABASE must name" || { echo "FAIL: expected the database name refused, got: $out"; exit 1; }
+  echo "PASS: test_worktree_mode_needs_configured_slots"
 }
 
 test_healthy_stack_with_only_a_title_exits_0_and_probes_nothing_unconfigured
@@ -203,4 +232,6 @@ test_worktree_slot_targets_its_own_ports_and_prints_host
 test_worktree_slot_served_by_another_checkout_is_refused
 test_worktree_slot_without_database_fails_with_reason
 test_worktree_without_claimed_slot_fails_with_reason
+test_worktree_slot_follows_the_configured_step_without_a_database_check
+test_worktree_mode_needs_configured_slots
 echo "All doctor tests passed."

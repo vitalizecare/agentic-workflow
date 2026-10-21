@@ -2,10 +2,10 @@
 // functions: the CLI and the browser drivers call them before anything
 // touches the network.
 //
-// Two overrides exist. A git worktree's own local stack (a worktree slot)
-// serves the web app on localhost:3000 + 10 * N for slot N in 1-15; that is
-// still this machine and seeded data, so it stays a "local" run. A PR living
-// preview (UI_EVIDENCE_PREVIEW_HOST_PATTERN) is "preview".
+// Two overrides exist. A git worktree's own local stack (a worktree slot, when
+// the deployment configures them) serves the web app on localhost:3000 +
+// step * N; that is still this machine and seeded data, so it stays a "local"
+// run. A PR living preview (UI_EVIDENCE_PREVIEW_HOST_PATTERN) is "preview".
 import type { ScriptStep } from "./script-schema.js";
 import { targetLabel } from "./step-target.js";
 
@@ -27,24 +27,48 @@ function previewHostPattern(env: Record<string, string | undefined>): RegExp | {
   }
 }
 
-// Worktree slots: slot N (1-15) serves the web app on 3000 + 10 * N.
-export const MAX_WORKTREE_SLOT = 15;
+// Worktree slots are deployment-specific too: slot N (1 to
+// UI_EVIDENCE_SLOT_COUNT) serves the web app on 3000 + UI_EVIDENCE_SLOT_PORT_STEP
+// * N. Unset, no slot host is accepted and localhost means :3000 only.
+export const SLOT_COUNT_VARIABLE = "UI_EVIDENCE_SLOT_COUNT";
+export const SLOT_PORT_STEP_VARIABLE = "UI_EVIDENCE_SLOT_PORT_STEP";
 
-/** The web port of worktree slot `slot`, or null outside 1-15. */
-export function worktreeSlotWebPort(slot: number): number | null {
-  return Number.isInteger(slot) && slot >= 1 && slot <= MAX_WORKTREE_SLOT ? 3000 + 10 * slot : null;
+export interface SlotConfig {
+  count: number;
+  step: number;
+}
+
+const positiveInt = (raw: string | undefined): number | null => (raw !== undefined && /^[1-9][0-9]*$/.test(raw.trim()) ? Number(raw.trim()) : null);
+
+/** The configured slots, null when none are configured, or an error naming the bad setting. */
+export function slotConfig(env: Record<string, string | undefined>): SlotConfig | null | { error: string } {
+  const rawCount = env[SLOT_COUNT_VARIABLE];
+  const rawStep = env[SLOT_PORT_STEP_VARIABLE];
+  if ((rawCount ?? "").trim() === "" && (rawStep ?? "").trim() === "") return null;
+  const count = positiveInt(rawCount);
+  const step = positiveInt(rawStep);
+  if (count === null || step === null) return { error: `${SLOT_COUNT_VARIABLE} and ${SLOT_PORT_STEP_VARIABLE} must both be positive integers` };
+  return { count, step };
+}
+
+/** The web port of worktree slot `slot`, or null outside 1 to the slot count. */
+export function worktreeSlotWebPort(slot: number, slots: SlotConfig): number | null {
+  return Number.isInteger(slot) && slot >= 1 && slot <= slots.count ? 3000 + slots.step * slot : null;
 }
 
 /** True for http://localhost:<slot web port> with nothing else in the URL. */
-function isWorktreeSlotHost(url: URL): boolean {
-  const port = Number(url.port);
-  return (
-    url.protocol === "http:" &&
-    url.hostname === "localhost" &&
-    port > 3000 &&
-    (port - 3000) % 10 === 0 &&
-    worktreeSlotWebPort((port - 3000) / 10) === port
-  );
+function isWorktreeSlotHost(url: URL, slots: SlotConfig): boolean {
+  const offset = Number(url.port) - 3000;
+  return url.protocol === "http:" && url.hostname === "localhost" && offset % slots.step === 0 && worktreeSlotWebPort(offset / slots.step, slots) !== null;
+}
+
+/** A localhost --host other than :3000 must be a configured slot's web port. */
+function checkSlotHost(url: URL, env: Record<string, string | undefined>): string | null {
+  const slots = slotConfig(env);
+  if (slots !== null && "error" in slots) return slots.error;
+  if (slots === null) return `--host ${url.origin}: no worktree slots are configured (set ${SLOT_COUNT_VARIABLE} and ${SLOT_PORT_STEP_VARIABLE}); omit --host for localhost:3000`;
+  if (!isWorktreeSlotHost(url, slots)) return `--host ${url.origin} is not a worktree slot web port (http://localhost:3000 + ${slots.step} * N, N 1-${slots.count}); omit --host for localhost:3000`;
+  return null;
 }
 
 export type HostResult = { ok: true; host: string; kind: "local" | "preview" } | { ok: false; error: string };
@@ -66,7 +90,8 @@ export function resolveHost(flags: HostFlags, env: Record<string, string | undef
   if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
     if ((url.pathname !== "/" && url.pathname !== "") || url.search !== "" || url.hash !== "") return { ok: false, error: "--host must be a bare origin (no path, query or fragment)" };
     if (url.hostname !== "localhost") return { ok: false, error: "--host must use localhost, not 127.0.0.1 (dev CORS allowlists name localhost)" };
-    if (!isWorktreeSlotHost(url)) return { ok: false, error: `--host ${url.origin} is not a worktree slot web port (http://localhost:3000 + 10 * N, N 1-${MAX_WORKTREE_SLOT}); omit --host for localhost:3000` };
+    const slotError = checkSlotHost(url, env);
+    if (slotError !== null) return { ok: false, error: slotError };
     return { ok: true, host: url.origin, kind: "local" };
   }
   if (url.protocol !== "https:") return { ok: false, error: "--host must be https" };

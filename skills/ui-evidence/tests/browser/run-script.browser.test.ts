@@ -128,7 +128,7 @@ describe("runScript", () => {
   it("sets script localStorage before the first page load and labels a drag with its destination", async () => {
     const dnd: UiScript = {
       route: "/dnd",
-      role: "manager",
+      role: "admin",
       viewports: ["desktop"],
       localStorage: { "dnd-flag": "on" },
       steps: [
