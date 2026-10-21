@@ -100,4 +100,14 @@ describe("text renderers", () => {
     expect(body).not.toMatch(/https?:\/\/|\.png/);
     expect(renderParityPrComment(summary())).not.toContain("Geometry failures");
   });
+
+  it("embeds each frame's pushed side-by-side image, and a dash for a frame without one", () => {
+    const s = summary({ provenance: "seeded", frames: { A: entry({ name: "A" }), B: entry({ name: "B" }) } });
+    const sideBySide = s.frames.A!.files.sideBySide;
+    const body = renderParityPrComment(s, { [`/run/${sideBySide}`]: "https://github.com/a/b/blob/c/x.png?raw=true" }, "/run");
+    expect(body).toContain("seeded data, images below");
+    expect(body).toContain("| State | Pixel diff | Known differences | Figma, implementation, diff |");
+    expect(body).toContain("| A | 9% | — | ![A: Figma, implementation, diff](https://github.com/a/b/blob/c/x.png?raw=true) |");
+    expect(body).toMatch(/\| B \| 9% \| — \| — \|$/m);
+  });
 });

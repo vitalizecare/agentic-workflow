@@ -8,6 +8,8 @@ export interface RunStep {
   screenshot: string;
 }
 
+import path from "node:path";
+
 import { isLocalHost } from "./host-guard.js";
 import type { PlanningMeta } from "./script-schema.js";
 import type { ModelInvocation } from "./usage.js";
@@ -68,11 +70,15 @@ function evidencePaths(summary: RunSummary): string[] {
   return e === undefined ? [] : [...e.traces, ...e.videos, ...(e.diff === null ? [] : [e.diff])];
 }
 
-function renderComment(summary: RunSummary, note: string | null, urls: Record<string, string>): string {
+/** The PR comment; an uploaded PNG is embedded as an image, anything else is its URL or local path. */
+export function renderPrComment(summary: RunSummary, note: string | null, urls: Record<string, string>): string {
   const priority = [...summary.steps.filter((s) => s.status !== "passed"), ...summary.lintFindings];
-  const where = (p: string): string => urls[p] ?? p;
-  const rows = summary.steps.map((s) => `| ${s.name} | ${s.status} | ${where(s.screenshot)} |`);
-  const extra = evidencePaths(summary).map((p) => `- ${where(p)}`);
+  const where = (p: string, alt: string): string => {
+    const url = urls[p];
+    return url === undefined ? p : p.endsWith(".png") ? `![${alt}](${url})` : url;
+  };
+  const rows = summary.steps.map((s) => `| ${s.name} | ${s.status} | ${where(s.screenshot, s.name)} |`);
+  const extra = evidencePaths(summary).map((p) => `- ${where(p, path.basename(p))}`);
   const score = summary.diffScore === undefined || summary.diffScore === null ? "" : `\nBaseline diff: ${(summary.diffScore * 100).toFixed(3)}% of pixels`;
   // "unchecked", "looks-off", and "sloppy" all sort first, per spec (the PR
   // comment table leads with unclear/looks-off/sloppy, not looks-right).
@@ -114,6 +120,6 @@ export async function publishEvidence(deps: PublishDeps, summary: RunSummary): P
     }
   }
 
-  const prCommentPosted = await deps.postPrComment(renderComment(summary, uploadNote, artifactUrls));
+  const prCommentPosted = await deps.postPrComment(renderPrComment(summary, uploadNote, artifactUrls));
   return { linearUploaded, prCommentPosted, localPaths, artifactUrls };
 }

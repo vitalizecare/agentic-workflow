@@ -1,6 +1,7 @@
 // Publishing policy and plan for design-parity evidence. Pure: the agent runs
 // the Linear MCP calls (prepare -> PUT -> create) from this plan; every write
-// still asks first. Images go to Linear; GitHub stays text-only.
+// still asks first. Images go to Linear; GitHub gets them too for seeded data,
+// pushed by github-publish.ts.
 import path from "node:path";
 
 import type { Provenance } from "./host-guard.js";
@@ -109,15 +110,23 @@ export function renderLinearComment(s: ParitySummary): string {
   ].join("\n");
 }
 
-/** GitHub text: numbers and explanations, no image URLs. */
-export function renderParityPrComment(s: ParitySummary): string {
+/**
+ * GitHub text: numbers and explanations. `urls` (side-by-side file -> image URL, from github-publish.ts)
+ * adds each frame's image; without it the images stay on Linear.
+ */
+export function renderParityPrComment(s: ParitySummary, urls: Record<string, string> = {}, runDir = ""): string {
   const fails = failedBoxChecks(s.frames);
-  const rows = Object.entries(s.frames).map(([name, e]) => `| ${name} | ${e.diffPercent}% | ${e.knownDifferences.join("; ") || "—"} |`);
+  const image = (name: string, e: ParityEntry): string => {
+    const url = urls[path.join(runDir, e.files.sideBySide)];
+    return url === undefined ? " — |" : ` ![${name}: Figma, implementation, diff](${url}) |`;
+  };
+  const withImages = Object.keys(urls).length > 0;
+  const rows = Object.entries(s.frames).map(([name, e]) => `| ${name} | ${e.diffPercent}% | ${e.knownDifferences.join("; ") || "—"} |${withImages ? image(name, e) : ""}`);
   return [
-    `## Design parity (${s.provenance} data, images on Linear)`,
+    `## Design parity (${s.provenance} data, images ${withImages ? "below" : "on Linear"})`,
     "",
-    "| State | Pixel diff | Known differences |",
-    "|---|---|---|",
+    withImages ? "| State | Pixel diff | Known differences | Figma, implementation, diff |" : "| State | Pixel diff | Known differences |",
+    withImages ? "|---|---|---|---|" : "|---|---|---|",
     ...rows,
     ...(fails.length > 0 ? ["", `Geometry failures: ${fails.map((f) => `${f.frame}: ${f.check.target} (${f.check.failure})`).join("; ")}`] : []),
   ].join("\n");

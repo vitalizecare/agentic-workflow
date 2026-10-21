@@ -14,6 +14,7 @@ describe("parseStepTarget", () => {
     expect(parseStepTarget("role:option|07:00-19:30 Day#2")).toEqual({ kind: "role", role: "option", name: "07:00-19:30 Day", nth: 2 });
     expect(parseStepTarget("text:Twin#1")).toEqual({ kind: "text", text: "Twin", nth: 1 });
     expect(parseStepTarget("role:option|A#0")).toHaveProperty("error");
+    expect(parseStepTarget("text:A#0")).toHaveProperty("error");
     expect(parseStepTarget("text:Shift #12")).toEqual({ kind: "text", text: "Shift #12" });
     expect(parseStepTarget("role:option|Room #4#1")).toEqual({ kind: "role", role: "option", name: "Room #4", nth: 1 });
     expect(parseStepTarget("role:option|A#99999999999999999999")).toHaveProperty("error");
@@ -31,6 +32,8 @@ describe("parseStepTarget", () => {
     expect(targetLabel("role:button|Save")).toBe("Save");
     expect(targetLabel("text:Delete")).toBe("Delete");
     expect(targetLabel("save-btn")).toBe("save-btn");
+    // A malformed target is labelled as written, so the write guard still reads its words.
+    expect(targetLabel("role:delete")).toBe("role:delete");
     expect(isPrefixedTarget("text:x")).toBe(true);
     expect(isPrefixedTarget("x")).toBe(false);
   });

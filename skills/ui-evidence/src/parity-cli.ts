@@ -20,12 +20,12 @@ const USAGE = "usage: ui-evidence parity <manifest.json> <run-dir> [--host url -
 const VALUE_FLAGS = new Set(["--host", "--app-build", "--db-provenance", "--reviewed"]);
 const BOOL_FLAGS = new Set(["--allow-preview-host", "--allow-writes"]);
 
-export function parseFlags(rest: string[]): Record<string, string | true> | null {
+export function parseFlags(rest: string[], valueFlags: ReadonlySet<string> = VALUE_FLAGS, boolFlags: ReadonlySet<string> = BOOL_FLAGS): Record<string, string | true> | null {
   const flags: Record<string, string | true> = {};
   for (let i = 0; i < rest.length; i++) {
     const f = rest[i] as string;
-    if (BOOL_FLAGS.has(f)) flags[f] = true;
-    else if (VALUE_FLAGS.has(f) && rest[i + 1] !== undefined) flags[f] = rest[++i] as string;
+    if (boolFlags.has(f)) flags[f] = true;
+    else if (valueFlags.has(f) && rest[i + 1] !== undefined) flags[f] = rest[++i] as string;
     else return null;
   }
   return flags;

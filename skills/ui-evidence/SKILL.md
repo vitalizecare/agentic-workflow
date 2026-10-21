@@ -1,6 +1,6 @@
 ---
 name: ui-evidence
-description: Generate Playwright-based UI evidence for a web app PR — plan with qa-runner, run headless with no model, repair broken selectors via judge, lint for sloppiness, and publish (ask-first) to Linear and a PR comment. Local stack only, never dev/prod.
+description: Generate Playwright-based UI evidence for a web app PR — plan with qa-runner, run headless with no model, repair broken selectors via judge, lint for sloppiness, and publish (ask-first) to Linear and to the PR as a comment with its screenshots. Local stack only, never dev/prod.
 ---
 
 # UI evidence
@@ -12,7 +12,18 @@ If `deployment.md` sits next to this file, read it first: it holds this deployme
 3. `with_stack_lock_and_heavy_job_lock 120 node dist/bin.js <script.json> <run-dir> [--baseline main.png] [--app-build <sha>] [--fixtures <id>] [--cache <manifest.json>]` (exit 0 all steps passed, 2 a step failed/broken, 1 bad usage or invalid script; the summary JSON is printed and written to `<run-dir>/summary.json`, including `appBuild` — pass `--app-build $(git rev-parse HEAD)` so the run is tied to a commit).
 4. Check DB provenance (`checkDbProvenance`) before deciding whether Linear upload is even offered.
 5. Visual verdict, cheapest first (`visual-gate.ts`): (a) deterministic pixel compare of the last passed screenshot against the approved main baseline — identical pixels and all steps passed ⇒ `unchanged`, **no model call**; (b) verdict cache (`verdict-cache.ts`) keyed on the actual after+baseline image hashes plus prompt/model version, app build, script, fixtures, viewport and browser version — a hit reuses the prior critique and is recorded as a cache hit; (c) otherwise one `judge visual-critique` call on the cropped changed region (image-capable CLI only — Jev is text-only and never sees images). Any failure, timeout, or out-of-enum result is `unchecked` — never a default `looks-right`. A run with a failed/broken step always gets a critique. The browser run and every step check always execute; a cached or `unchanged` visual never stands in for a behavior check.
-6. `publishEvidence(...)` — every write asks first, per this repo's policy. Artifact URLs (screenshots, `*-trace.zip`, videos, diff overlay) come only from an approved `uploadArtifact` uploader and only when DB provenance is `seeded`; otherwise evidence stays local paths.
+6. Put the evidence on the PR ([Publishing to the PR](#publishing-to-the-pr)): every write asks first, per this repo's policy. Screenshots and the diff overlay go up only when DB provenance is `seeded`; otherwise the comment carries text and local paths and the images stay on this machine.
+
+## Publishing to the PR
+
+Every run that produced evidence for a PR ends with a comment on that PR. Use the `gh` CLI (`mcp: github/*` works too if `gh` is unavailable); always pass `--repo <owner/name>` explicitly, never rely on the cwd or `GH_REPO`.
+
+1. **Review first:** open every screenshot and the diff overlay (the Read tool shows PNGs) and reject bad captures (mid-animation, focus rings, see-through popovers) before anything leaves the machine.
+2. **Ask the user** to approve the upload, naming the PR and the provenance.
+3. Push the images: `node dist/bin.js gh-publish <run-dir> --repo <owner/name> --pr <n> --db-provenance seeded --reviewed <file>,<file>` (`<run-dir>/parity.json` for a parity run, else `summary.json`; a parity run carries its own provenance, so leave out `--db-provenance`). It commits the PNGs through `gh api` (the git data API: no checkout, your working tree is untouched) to the PR's evidence branch `ui-evidence/pr-<n>`, under `pr-<n>/<run-id>/`, on top of earlier runs and never force-pushed, and writes `<run-dir>/pr-comment.md` with each image embedded by a commit-pinned `https://github.com/<repo>/blob/<sha>/…?raw=true` URL, which renders for anyone who can read the repo. Exit 0 pushed (stdout: `branch`, `commit`, `urls`, `commentFile`, `post`), 1 bad usage or input, or provenance not `seeded` (nothing pushed), 3 an image isn't in `--reviewed` (nothing pushed; stdout lists `unreviewed`), 4 `gh` failed.
+4. Post it: run the `post` argv it printed, `gh pr comment <n> --repo <owner/name> --body-file <run-dir>/pr-comment.md`. For a run that isn't `seeded`, post the text-only comment instead: `renderPrComment(summary, note, {})` from `dist/publish.js` (or `renderParityPrComment` from `dist/parity-publish.js`), written to a file and posted the same way.
+
+The evidence branch is never merged and holds only evidence; delete it once the PR closes (`gh api -X DELETE repos/<owner/name>/git/refs/heads/ui-evidence/pr-<n>`, after asking). Deleting the branch doesn't erase pushed images from GitHub right away, which is why only `seeded` data is ever pushed.
 
 ## Worktree stacks
 
@@ -55,9 +66,9 @@ Exit 0 all geometry checks passed, 1 bad usage/manifest/guard, 2 a geometry chec
 5. **Known differences:** list intentional differences (copy, data) per frame. They are carried into the report, the Linear subtitle and the PR text, so a non-zero diff is explained, never hidden. Do not list a difference you have not looked at.
 6. **Capture hygiene** is built in: `document.fonts.ready`, `settleMs` before each screenshot (a popover mid fade-in gives a see-through shot), blur of the active element plus a click on a neutral spot (a Radix select restores focus after closing and leaves a blue ring), scroll containers reset to the top, and `formValues` applied before capture. Raise `settleMs` for slow animations.
 
-### Publishing parity evidence (images to Linear, text to GitHub)
+### Publishing parity evidence (images to Linear and the PR)
 
-- **Policy** (`parity-publish.ts`): images go to Linear, GitHub stays text-only. Linear upload is allowed for `seeded` and `scrubbed` provenance after an explicit ask; `unknown` never leaves the machine. A GitHub comment carries image URLs only for `seeded` data with an approved uploader (`renderParityPrComment` has none). Every write still asks first.
+- **Policy** (`parity-publish.ts`): Linear upload is allowed for `seeded` and `scrubbed` provenance after an explicit ask; `unknown` never leaves the machine. GitHub gets the side-by-side images only for `seeded` data, through `gh-publish` ([Publishing to the PR](#publishing-to-the-pr)); a `scrubbed` run's PR comment stays text-only (images on Linear). Every write still asks first.
 - **Review gate:** before any upload, open every image in the plan (the Read tool shows PNGs) and compare it with its `expectation`. Reject mid-animation shots, focus rings and see-through popovers and re-capture. `parity-plan` stays blocked (exit 3) until the files are listed: `node dist/bin.js parity-plan <run-dir> --reviewed <file>,<file>`. The list is self-attested — nothing enforces that the images were really opened, so do it.
 - **Helpers:** `buildPutCommand`, `selectStale`, `renderLinearComment` and `renderParityPrComment` are exported from `dist/parity-publish.js`; there is no subcommand for them. Import them from a short `node --input-type=module -e` call, or apply the same rules by hand.
 - **Per image, one at a time** (the signed URL lives 60s): `mcp: linear/prepare_attachment_upload` (issue, filename, contentType `image/png`, exact size) → PUT the bytes with every returned header verbatim (`buildPutCommand` gives the argv; `curl --data-binary`) → `mcp: linear/create_attachment_from_upload` with `assetUrl`, the plan's `title` (`Pixel diff: <state> (Figma | implementation | diff)`) and `subtitle` (design node, build, viewport, diff %, known differences). Never pass `--app-build` a commit you did not verify; an unverified build prints as "unverified".
