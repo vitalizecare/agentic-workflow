@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # aw:trait-check — PostToolUse on file edits + Stop (lever, opt-in via
 # scripts/install-trait-check.sh). Judges the repo's traits
-# (<repo>/.agents/traits/*.md plus the private overlay
-# ~/.agentic-workflow/traits/<repo>/*.md) against what changed, via
+# (<repo>/.agents/traits/*.yaml plus the private overlay
+# ~/.agentic-workflow/traits/<repo>/*.yaml) against what changed, via
 # `judge trait-check` (Jev):
 #   PostToolUse: the edited files' diff vs HEAD. Likely violations go back to
 #                the agent as feedback (exit 2 + stderr); the edit already happened.

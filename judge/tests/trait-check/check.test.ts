@@ -8,8 +8,8 @@ const STATE = "/state";
 const REPO_TRAITS = `${ROOT}/.agents/traits`;
 const LOCAL_TRAITS = `${STATE}/traits/web-app`;
 
-const traitDoc = (name: string, extra = "") =>
-  `---\nname: ${name}\nsubject: S ${name}.\nrequirement: R ${name}.\npurpose: P.\n${extra}---\n`;
+const traitDoc = (name: string, extra = "", severity = "block") =>
+  `version: 1\nname: ${name}\nsubject: S ${name}.\nrequirement: R ${name}.\npurpose: P.\nseverity: ${severity}\n${extra}`;
 
 const diffFor = (file: string, line = "+x") => `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n${line}\n`;
 
@@ -65,16 +65,16 @@ describe("runTraitCheck", () => {
   });
 
   it("skips when the repo and overlay have no readable traits, logging parse errors", async () => {
-    const { deps, log } = setup({ dirs: { [REPO_TRAITS]: ["broken.md", "notes.txt"] } });
+    const { deps, log } = setup({ dirs: { [REPO_TRAITS]: ["broken.yaml", "notes.md"] } });
     expect(await runTraitCheck(deps, EDIT)).toEqual({ status: "skipped", reason: "no-traits" });
-    expect(log).toEqual([{ event: "trait-parse-error", file: `${REPO_TRAITS}/broken.md`, error: "missing or unterminated --- frontmatter" }]);
+    expect(log).toEqual([{ event: "trait-parse-error", file: `${REPO_TRAITS}/broken.yaml`, error: "trait: Expected object, received null" }]);
   });
 
   it("skips edits outside the repo or outside every trait's paths without calling git diff", async () => {
     const git = vi.fn(() => undefined);
     const { deps, fetch } = setup({
-      dirs: { [REPO_TRAITS]: ["ts-only.md"] },
-      files: { [`${REPO_TRAITS}/ts-only.md`]: traitDoc("ts-only", 'paths: ["**/*.ts"]\n') },
+      dirs: { [REPO_TRAITS]: ["ts-only.yaml"] },
+      files: { [`${REPO_TRAITS}/ts-only.yaml`]: traitDoc("ts-only", 'paths: ["**/*.ts"]\n') },
       git,
     });
     expect(await runTraitCheck(deps, { ...EDIT, files: ["/elsewhere/a.ts", "../README.md", ".."] })).toEqual({ status: "skipped", reason: "nothing-in-scope" });
@@ -84,12 +84,12 @@ describe("runTraitCheck", () => {
 
   it("checks an edited file (tracked + untracked) and reports violations at or above minP", async () => {
     const { deps, log, calls } = setup({
-      dirs: { [REPO_TRAITS]: ["alpha.md", "beta.md"], [LOCAL_TRAITS]: ["beta.md", "gamma.md"] },
+      dirs: { [REPO_TRAITS]: ["alpha.yaml", "beta.yaml"], [LOCAL_TRAITS]: ["beta.yaml", "gamma.yaml"] },
       files: {
-        [`${REPO_TRAITS}/alpha.md`]: traitDoc("alpha", "severity: warn\n"),
-        [`${REPO_TRAITS}/beta.md`]: traitDoc("beta"),
-        [`${LOCAL_TRAITS}/beta.md`]: traitDoc("beta", "guidance: Overlay wins.\n"),
-        [`${LOCAL_TRAITS}/gamma.md`]: traitDoc("gamma"),
+        [`${REPO_TRAITS}/alpha.yaml`]: traitDoc("alpha", "", "warn"),
+        [`${REPO_TRAITS}/beta.yaml`]: traitDoc("beta"),
+        [`${LOCAL_TRAITS}/beta.yaml`]: traitDoc("beta", "guidance: Overlay wins.\n"),
+        [`${LOCAL_TRAITS}/gamma.yaml`]: traitDoc("gamma"),
       },
       git: (args) => {
         if (args[0] === "diff" && args[1] === "--no-index") return { code: 1, stdout: diffFor("src/new.ts", "+new") };
@@ -125,8 +125,8 @@ describe("runTraitCheck", () => {
   it("stop mode diffs from the merge base and only reports severity: block", async () => {
     const seen: string[][] = [];
     const { deps } = setup({
-      dirs: { [REPO_TRAITS]: ["warned.md", "blocked.md"] },
-      files: { [`${REPO_TRAITS}/warned.md`]: traitDoc("warned", "severity: warn\n"), [`${REPO_TRAITS}/blocked.md`]: traitDoc("blocked") },
+      dirs: { [REPO_TRAITS]: ["warned.yaml", "blocked.yaml"] },
+      files: { [`${REPO_TRAITS}/warned.yaml`]: traitDoc("warned", "", "warn"), [`${REPO_TRAITS}/blocked.yaml`]: traitDoc("blocked") },
       git: (args) => {
         seen.push([...args]);
         if (args[0] === "merge-base") return { code: 0, stdout: "abc123\n" };
@@ -144,8 +144,8 @@ describe("runTraitCheck", () => {
   it("stop mode falls back to HEAD when there is no merge base", async () => {
     const seen: string[][] = [];
     const { deps } = setup({
-      dirs: { [REPO_TRAITS]: ["blocked.md"] },
-      files: { [`${REPO_TRAITS}/blocked.md`]: traitDoc("blocked") },
+      dirs: { [REPO_TRAITS]: ["blocked.yaml"] },
+      files: { [`${REPO_TRAITS}/blocked.yaml`]: traitDoc("blocked") },
       git: (args) => {
         seen.push([...args]);
         return args[0] === "merge-base" ? { code: 1, stdout: "" } : undefined;
@@ -157,8 +157,8 @@ describe("runTraitCheck", () => {
 
   it("honours trait-ignore-file directives in the edited file", async () => {
     const { deps, fetch } = setup({
-      dirs: { [REPO_TRAITS]: ["alpha.md"] },
-      files: { [`${REPO_TRAITS}/alpha.md`]: traitDoc("alpha"), [`${ROOT}/src/a.ts`]: "// trait-ignore-file alpha: generated\nexport {}" },
+      dirs: { [REPO_TRAITS]: ["alpha.yaml"] },
+      files: { [`${REPO_TRAITS}/alpha.yaml`]: traitDoc("alpha"), [`${ROOT}/src/a.ts`]: "// trait-ignore-file alpha: generated\nexport {}" },
       git: (args) => (args[0] === "diff" ? { code: 0, stdout: diffFor("src/a.ts") } : undefined),
     });
     expect(await runTraitCheck(deps, EDIT)).toEqual({ status: "skipped", reason: "nothing-in-scope" });
@@ -167,13 +167,13 @@ describe("runTraitCheck", () => {
 
   it("splits questions into batches of 16 and by instruction size", async () => {
     const names = Array.from({ length: 17 }, (_, i) => `t${i}`);
-    const huge = `\n${"x".repeat(31_000)}`;
+    const huge = `context: ${"x".repeat(31_000)}\n`;
     const { deps, calls } = setup({
-      dirs: { [REPO_TRAITS]: [...names, "big-a", "big-b"].map((n) => `${n}.md`) },
+      dirs: { [REPO_TRAITS]: [...names, "big-a", "big-b"].map((n) => `${n}.yaml`) },
       files: {
-        ...Object.fromEntries(names.map((n) => [`${REPO_TRAITS}/${n}.md`, traitDoc(n)])),
-        [`${REPO_TRAITS}/big-a.md`]: traitDoc("big-a") + huge,
-        [`${REPO_TRAITS}/big-b.md`]: traitDoc("big-b") + huge,
+        ...Object.fromEntries(names.map((n) => [`${REPO_TRAITS}/${n}.yaml`, traitDoc(n)])),
+        [`${REPO_TRAITS}/big-a.yaml`]: traitDoc("big-a", huge),
+        [`${REPO_TRAITS}/big-b.yaml`]: traitDoc("big-b", huge),
       },
       git: (args) => (args[0] === "diff" ? { code: 0, stdout: diffFor("src/a.ts") } : undefined),
     });
@@ -184,8 +184,8 @@ describe("runTraitCheck", () => {
   it("ignores missing or unparseable answers and gives each call at least 1s", async () => {
     let t = 0;
     const { deps } = setup({
-      dirs: { [REPO_TRAITS]: ["alpha.md", "beta.md"] },
-      files: { [`${REPO_TRAITS}/alpha.md`]: traitDoc("alpha"), [`${REPO_TRAITS}/beta.md`]: traitDoc("beta") },
+      dirs: { [REPO_TRAITS]: ["alpha.yaml", "beta.yaml"] },
+      files: { [`${REPO_TRAITS}/alpha.yaml`]: traitDoc("alpha"), [`${REPO_TRAITS}/beta.yaml`]: traitDoc("beta") },
       git: (args) => (args[0] === "diff" ? { code: 0, stdout: diffFor("src/a.ts") } : undefined),
       answer: () => ({ status: 200, body: { answers: { alpha: { type: "noul", noul: 1 } } } }),
       now: () => (t += 5_000),
@@ -194,8 +194,8 @@ describe("runTraitCheck", () => {
   });
 
   it("is unavailable when every Jev call fails, and checked when only some do", async () => {
-    const dirs = { [REPO_TRAITS]: ["alpha.md"] };
-    const files = { [`${REPO_TRAITS}/alpha.md`]: traitDoc("alpha") };
+    const dirs = { [REPO_TRAITS]: ["alpha.yaml"] };
+    const files = { [`${REPO_TRAITS}/alpha.yaml`]: traitDoc("alpha") };
     const twoFiles = (args: readonly string[]) => (args[0] === "diff" ? { code: 0, stdout: diffFor("src/a.ts") + diffFor("src/b.ts") } : undefined);
 
     const down = setup({ dirs, files, git: twoFiles, answer: () => ({ status: 503 }) });
@@ -209,11 +209,11 @@ describe("runTraitCheck", () => {
 
   it("scan mode judges whole tracked files as added lines, keeps both severities and logs no assessments", async () => {
     const { deps, calls, log } = setup({
-      dirs: { [REPO_TRAITS]: ["alpha.md", "beta.md", "gamma.md"] },
+      dirs: { [REPO_TRAITS]: ["alpha.yaml", "beta.yaml", "gamma.yaml"] },
       files: {
-        [`${REPO_TRAITS}/alpha.md`]: traitDoc("alpha", 'paths: ["src/**"]\n'),
-        [`${REPO_TRAITS}/beta.md`]: traitDoc("beta", "severity: warn\n"),
-        [`${REPO_TRAITS}/gamma.md`]: traitDoc("gamma"),
+        [`${REPO_TRAITS}/alpha.yaml`]: traitDoc("alpha", 'paths: ["src/**"]\n'),
+        [`${REPO_TRAITS}/beta.yaml`]: traitDoc("beta", "", "warn"),
+        [`${REPO_TRAITS}/gamma.yaml`]: traitDoc("gamma"),
         [`${ROOT}/src/a.ts`]: "one\ntwo\n",
         [`${ROOT}/src/bin.png`]: "x\0y",
       },
@@ -234,8 +234,8 @@ describe("runTraitCheck", () => {
   it("scan mode skips files no selected trait covers without reading them", async () => {
     const readFile = vi.fn();
     const { deps } = setup({
-      dirs: { [REPO_TRAITS]: ["alpha.md"] },
-      files: { [`${REPO_TRAITS}/alpha.md`]: traitDoc("alpha", 'paths: ["src/**"]\n') },
+      dirs: { [REPO_TRAITS]: ["alpha.yaml"] },
+      files: { [`${REPO_TRAITS}/alpha.yaml`]: traitDoc("alpha", 'paths: ["src/**"]\n') },
       git: (args) => (args[0] === "ls-files" ? { code: 0, stdout: "docs/a.md\0" } : undefined),
     });
     const wrapped = { ...deps, readFile: (f: string) => (f.startsWith(REPO_TRAITS) ? deps.readFile(f) : readFile(f)) };
@@ -276,25 +276,25 @@ describe("formatFindings", () => {
   });
 
   it("formats one edit finding with its rule, fix and repo-relative trait file", () => {
-    expect(formatFindings("edit", [finding("alpha", "/repo/.agents/traits/alpha.md", "Do this. ")], "/repo")).toBe(
+    expect(formatFindings("edit", [finding("alpha", "/repo/.agents/traits/alpha.yaml", "Do this. ")], "/repo")).toBe(
       [
         "trait-check: your last edit likely breaks 1 project trait. Fix each one that applies, or say in one line why it doesn't, then continue.",
         "",
         "1. alpha — src/a.ts lines 3-9 (p=0.88)",
         "   Rule: Rule alpha.",
         "   Fix: Do this.",
-        "   Details: .agents/traits/alpha.md",
+        "   Details: .agents/traits/alpha.yaml",
       ].join("\n"),
     );
   });
 
   it("lists at most ten stop findings, keeps overlay paths absolute and counts the rest", () => {
-    const many = Array.from({ length: 12 }, (_, i) => finding(`t${i}`, "/state/traits/web-app/t.md"));
+    const many = Array.from({ length: 12 }, (_, i) => finding(`t${i}`, "/state/traits/web-app/t.yaml"));
     const text = formatFindings("stop", many, "/repo");
     expect(text.startsWith("trait-check: before you finish, this branch's changes likely break 12 project traits marked severity: block.")).toBe(true);
     expect(text).toContain("10. t9 —");
     expect(text).not.toContain("11. t10");
-    expect(text).toContain("   Details: /state/traits/web-app/t.md");
+    expect(text).toContain("   Details: /state/traits/web-app/t.yaml");
     expect(text).not.toContain("Fix:");
     expect(text.endsWith("…and 2 more.")).toBe(true);
   });

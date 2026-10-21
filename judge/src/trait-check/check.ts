@@ -2,15 +2,15 @@
 //   edit mode: the files the agent just edited, diffed against HEAD (PostToolUse).
 //   stop mode: everything on the branch since it left the base (Stop).
 //   scan mode: whole tracked files, judged as if newly added (finding existing debt).
-// Traits come from <repo>/.agents/traits/*.md plus a private overlay at
-// <state>/traits/<repo-name>/*.md; an overlay trait replaces a repo trait of the
+// Traits come from <repo>/.agents/traits/*.yaml plus a private overlay at
+// <state>/traits/<repo-name>/*.yaml; an overlay trait replaces a repo trait of the
 // same name, so a rule can be tuned locally before its PR.
 import path from "node:path";
 
 import { callJev, type JevDeps, type JevQuestion } from "../providers/jev-api.js";
 import { chunkFile, type FileDiff, ignoredTraits, parseDiff, type Source } from "./diff.js";
 import { inScope } from "./glob.js";
-import { parseTrait, type Trait } from "./trait.js";
+import { parseTrait, TRAIT_EXTENSION, type Trait } from "./trait.js";
 
 export type Mode = "edit" | "stop" | "scan";
 
@@ -89,7 +89,7 @@ export function question(trait: Trait): JevQuestion {
 function loadTraits(deps: TraitCheckDeps, dirs: readonly string[]): Map<string, Trait> {
   const traits = new Map<string, Trait>();
   for (const dir of dirs) {
-    for (const name of deps.listDir(dir).filter((f) => f.endsWith(".md")).sort()) {
+    for (const name of deps.listDir(dir).filter((f) => f.endsWith(TRAIT_EXTENSION)).sort()) {
       const file = path.join(dir, name);
       const parsed = parseTrait(deps.readFile(file) ?? "", file);
       if (parsed.ok) traits.set(parsed.trait.name, parsed.trait);

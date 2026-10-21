@@ -92,20 +92,19 @@ Tests (all run under a temp `HOME`): `config/hooks/tests/{codex-adapter,cursor-a
 
 ## Trait check (opt-in)
 
-`trait-check.sh` checks a repo's **traits** against what an agent changed. A trait is one rule per file. It lives in `<repo>/.agents/traits/<name>.md`, which is shared, or in `~/.agentic-workflow/traits/<repo>/<name>.md`, a private draft overlay that wins when the names match. `<repo>` is the main checkout's directory name, so worktrees share the overlay.
+`trait-check.sh` checks a repo's **traits** against what an agent changed. A trait is one rule per file. It lives in `<repo>/.agents/traits/<name>.yaml`, which is shared, or in `~/.agentic-workflow/traits/<repo>/<name>.yaml`, a private draft overlay that wins when the names match. `<repo>` is the main checkout's directory name, so worktrees share the overlay.
 
-```markdown
----
-name: no-raw-sql-in-handlers        # kebab-case; must match the file name
+```yaml
+version: 1                                       # file format version; only 1 is read
+name: no-raw-sql-in-handlers                     # kebab-case; must match the file name
 subject: RPC handlers
 requirement: Handlers call a Repo; they never build SQL themselves.
 purpose: Keeps queries reviewable and testable in one place.
 applicability: Files that define RPC handlers.   # optional
 guidance: Move the query into the slice's Repo.ts. # optional, shown as "Fix:"
+context: Examples and sources for the judge.     # optional
 paths: ["packages/services/src/**/*.ts"]         # optional globs; omitted = every file
-severity: block                                  # block (default) | warn
----
-Optional body: examples and context for the judge.
+severity: block                                  # block | warn
 ```
 
 `judge trait-check` diffs the change (untracked files included) and asks Jev (TypeSafe System One, key `TYPESAFE_API_KEY` env or keychain `agentic-workflow-typesafe`) one choice question per trait per diff chunk: compliant, violation, not-applicable, or inconclusive.

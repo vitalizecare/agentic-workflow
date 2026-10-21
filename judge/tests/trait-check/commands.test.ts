@@ -11,7 +11,7 @@ const { runTraitCheckCli } = await import("../../src/trait-check/commands.js");
 
 const deps = {} as TraitCheckDeps;
 const finding = {
-  trait: { name: "alpha", subject: "s", requirement: "r", purpose: "p", severity: "block", file: "/repo/.agents/traits/alpha.md" },
+  trait: { name: "alpha", subject: "s", requirement: "r", purpose: "p", severity: "block", file: "/repo/.agents/traits/alpha.yaml" },
   source: { path: "a.ts", startLine: 1, endLine: 2, text: "" },
   p: 0.9,
 };

@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { parseTrait } from "../../src/trait-check/trait.js";
 
-const doc = (frontmatter: string, body = "") => `---\n${frontmatter}\n---\n${body}`;
-const base = "name: static-imports-first\nsubject: Static imports.\nrequirement: >\n  Put static imports at the top.\npurpose: Find dependencies first.";
+const base =
+  "version: 1\nname: static-imports-first\nsubject: Static imports.\nrequirement: >\n  Put static imports at the top.\npurpose: Find dependencies first.\nseverity: block";
 
 describe("parseTrait", () => {
-  it("reads frontmatter fields, defaults severity to block and keeps the body as context", () => {
-    const out = parseTrait(doc(`${base}\npaths: ["**/*.ts"]`, "\n```diff\n-a\n+b\n```\n"), "/r/.agents/traits/static-imports-first.md");
+  it("reads every field and drops the version", () => {
+    const out = parseTrait(`${base}\npaths: ["**/*.ts"]\ncontext: |-\n  \`\`\`diff\n  -a\n  +b\n  \`\`\``, "/r/.agents/traits/static-imports-first.yaml");
     expect(out).toEqual({
       ok: true,
       trait: {
@@ -18,43 +18,42 @@ describe("parseTrait", () => {
         paths: ["**/*.ts"],
         severity: "block",
         context: "```diff\n-a\n+b\n```",
-        file: "/r/.agents/traits/static-imports-first.md",
+        file: "/r/.agents/traits/static-imports-first.yaml",
       },
     });
   });
 
-  it("omits context when the body is empty or absent, and accepts optional fields", () => {
-    const withOptional = `${base}\napplicability: Only TS.\nguidance: Move them.\nseverity: warn`;
-    expect(parseTrait(`---\n${withOptional}\n---`, "static-imports-first.md")).toMatchObject({
-      ok: true,
-      trait: { applicability: "Only TS.", guidance: "Move them.", severity: "warn" },
-    });
-    const out = parseTrait(doc(base, "   \n"), "static-imports-first.md");
+  it("accepts the optional fields and omits the absent ones", () => {
+    const withOptional = `${base.replace("severity: block", "severity: warn")}\napplicability: Only TS.\nguidance: Move them.`;
+    const out = parseTrait(withOptional, "static-imports-first.yaml");
+    expect(out).toMatchObject({ ok: true, trait: { applicability: "Only TS.", guidance: "Move them.", severity: "warn" } });
     expect(out.ok && "context" in out.trait).toBe(false);
   });
 
-  it("rejects a document without frontmatter", () => {
-    expect(parseTrait("# just markdown", "x.md")).toEqual({ ok: false, file: "x.md", error: "missing or unterminated --- frontmatter" });
-  });
-
   it("rejects invalid YAML with its first diagnostic line", () => {
-    const out = parseTrait(doc("name: [unclosed"), "x.md");
+    const out = parseTrait("name: [unclosed", "x.yaml");
     expect(out.ok).toBe(false);
     expect(!out.ok && out.error.startsWith("invalid YAML: ")).toBe(true);
   });
 
+  it("requires a known version and an explicit severity", () => {
+    expect(parseTrait(base.replace("version: 1\n", ""), "static-imports-first.yaml")).toMatchObject({ ok: false, error: expect.stringMatching(/^version: /) });
+    expect(parseTrait(base.replace("version: 1", "version: 2"), "static-imports-first.yaml")).toMatchObject({ ok: false, error: expect.stringMatching(/^version: /) });
+    expect(parseTrait(base.replace("\nseverity: block", ""), "static-imports-first.yaml")).toMatchObject({ ok: false, error: expect.stringMatching(/^severity: /) });
+  });
+
   it("rejects unknown keys and bad values, naming the field", () => {
-    expect(parseTrait(doc(`${base}\nwhen: always`), "static-imports-first.md")).toMatchObject({ ok: false, error: expect.stringContaining("Unrecognized key") });
-    expect(parseTrait(doc(base.replace("static-imports-first", "trait-bad")), "trait-bad.md")).toMatchObject({ ok: false, error: expect.stringMatching(/^name: /) });
-    expect(parseTrait(doc("just a string"), "x.md")).toMatchObject({ ok: false, error: expect.stringMatching(/^frontmatter: /) });
-    expect(parseTrait(doc(`${base}\npaths: ["src/{a,b.ts"]`), "static-imports-first.md")).toEqual({
+    expect(parseTrait(`${base}\nwhen: always`, "static-imports-first.yaml")).toMatchObject({ ok: false, error: expect.stringContaining("Unrecognized key") });
+    expect(parseTrait(base.replace("static-imports-first", "trait-bad"), "trait-bad.yaml")).toMatchObject({ ok: false, error: expect.stringMatching(/^name: /) });
+    expect(parseTrait("just a string", "x.yaml")).toMatchObject({ ok: false, error: expect.stringMatching(/^trait: /) });
+    expect(parseTrait(`${base}\npaths: ["src/{a,b.ts"]`, "static-imports-first.yaml")).toEqual({
       ok: false,
-      file: "static-imports-first.md",
+      file: "static-imports-first.yaml",
       error: "paths.0: unclosed { in glob",
     });
   });
 
   it("requires the name to match the file name", () => {
-    expect(parseTrait(doc(base), "/r/other.md")).toEqual({ ok: false, file: "/r/other.md", error: 'name "static-imports-first" must match the file name "other.md"' });
+    expect(parseTrait(base, "/r/other.yaml")).toEqual({ ok: false, file: "/r/other.yaml", error: 'name "static-imports-first" must match the file name "other.yaml"' });
   });
 });
