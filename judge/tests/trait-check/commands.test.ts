@@ -57,5 +57,7 @@ describe("runTraitCheckCli", () => {
       stdout: '{"trait":"alpha","severity":"block","path":"a.ts","lines":[1,2],"p":0.9}',
       stderr: "trait-check: 1 finding from 3 Jev requests",
     });
+    runTraitCheck.mockResolvedValueOnce({ status: "checked", root: "/repo", findings: [finding, finding], requests: 3 });
+    expect((await runTraitCheckCli(["--scan"], deps)).stderr).toBe("trait-check: 2 findings from 3 Jev requests");
   });
 });
