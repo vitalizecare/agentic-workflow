@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { formatFindings, question, runTraitCheck, type Finding, type TraitCheckDeps, type TraitCheckOptions } from "../../src/trait-check/check.js";
+import { formatFindings, formatScanFindings, question, runTraitCheck, type Finding, type TraitCheckDeps, type TraitCheckOptions } from "../../src/trait-check/check.js";
 import type { Trait } from "../../src/trait-check/trait.js";
 
 const ROOT = "/repo";
@@ -206,6 +206,42 @@ describe("runTraitCheck", () => {
     const out = await runTraitCheck(partial.deps, { ...EDIT, files: ["../src/a.ts", "../src/b.ts"] });
     expect(out.status === "checked" && out.findings).toHaveLength(1);
   });
+
+  it("scan mode judges whole tracked files as added lines, keeps both severities and logs no assessments", async () => {
+    const { deps, calls, log } = setup({
+      dirs: { [REPO_TRAITS]: ["alpha.md", "beta.md", "gamma.md"] },
+      files: {
+        [`${REPO_TRAITS}/alpha.md`]: traitDoc("alpha", 'paths: ["src/**"]\n'),
+        [`${REPO_TRAITS}/beta.md`]: traitDoc("beta", "severity: warn\n"),
+        [`${REPO_TRAITS}/gamma.md`]: traitDoc("gamma"),
+        [`${ROOT}/src/a.ts`]: "one\ntwo\n",
+        [`${ROOT}/src/bin.png`]: "x\0y",
+      },
+      git: (args) => (args[0] === "ls-files" ? { code: 0, stdout: ["src/a.ts", "src/gone.ts", "src/bin.png", ""].join("\0") } : undefined),
+      answer: () => ({ status: 200, body: { answers: { alpha: choice("violation", { violation: 0.9 }), beta: choice("violation", { violation: 0.85 }) } } }),
+    });
+    const out = await runTraitCheck(deps, { mode: "scan", files: [], base: "origin/main", paths: ["src"], traits: ["alpha", "beta"], budgetMs: 1000, minP: 0.8, concurrency: 2 });
+    expect(out.status === "checked" && out.findings.map((f) => [f.trait.name, f.source.path, f.source.startLine, f.source.endLine])).toEqual([
+      ["alpha", "src/a.ts", 1, 2],
+      ["beta", "src/a.ts", 1, 2],
+    ]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.keys).toEqual(["alpha", "beta"]);
+    expect(calls[0]?.state).toMatchObject({ source: { path: "src/a.ts", text: "@@ -0,0 +1,2 @@\n+one\n+two" } });
+    expect(log.filter((e) => e.event === "assessment")).toEqual([]);
+  });
+
+  it("scan mode skips files no selected trait covers without reading them", async () => {
+    const readFile = vi.fn();
+    const { deps } = setup({
+      dirs: { [REPO_TRAITS]: ["alpha.md"] },
+      files: { [`${REPO_TRAITS}/alpha.md`]: traitDoc("alpha", 'paths: ["src/**"]\n') },
+      git: (args) => (args[0] === "ls-files" ? { code: 0, stdout: "docs/a.md\0" } : undefined),
+    });
+    const wrapped = { ...deps, readFile: (f: string) => (f.startsWith(REPO_TRAITS) ? deps.readFile(f) : readFile(f)) };
+    expect(await runTraitCheck(wrapped, { mode: "scan", files: [], base: "origin/main", budgetMs: 1000, minP: 0.8 })).toEqual({ status: "skipped", reason: "nothing-in-scope" });
+    expect(readFile).not.toHaveBeenCalled();
+  });
 });
 
 describe("question", () => {
@@ -220,6 +256,15 @@ describe("question", () => {
 
   it("omits absent optional fields", () => {
     expect(question(trait).instructions).toContain('{"name":"n","subject":"s","requirement":"r","purpose":"p"}');
+  });
+});
+
+describe("formatScanFindings", () => {
+  it("prints one JSON line per finding with p rounded to 3 places", () => {
+    const trait: Trait = { name: "alpha", subject: "s", requirement: "r", purpose: "p", severity: "warn", file: "/f.md" };
+    expect(formatScanFindings([{ trait, source: { path: "a.ts", startLine: 1, endLine: 9, text: "" }, p: 0.87654 }])).toBe(
+      '{"trait":"alpha","severity":"warn","path":"a.ts","lines":[1,9],"p":0.877}',
+    );
   });
 });
 

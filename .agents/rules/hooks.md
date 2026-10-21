@@ -112,7 +112,8 @@ Optional body: examples and context for the judge.
 - **PostToolUse** (edit tools): the edited files vs HEAD, `p(violation) ≥ 0.6`, any severity. Exit 2 sends the findings back as feedback.
 - **Stop**: the branch vs its merge base with `origin/main`, `p ≥ 0.8`, `severity: block` only. Exit 2 makes the agent continue once (`stop_hook_active` exits 0).
 - A file opts out of a trait with `// trait-ignore-file <name>: <reason>` in its leading comment block.
-- A repo with no traits costs one `git rev-parse`. Jev being down or the key missing fails open (`jev-unavailable`). Every assessment is logged to `~/.agentic-workflow/judge/trait-check/log.jsonl`.
+- A repo with no traits costs one `git rev-parse`. Jev being down or the key missing fails open (`jev-unavailable`). Every hook assessment is logged to `~/.agentic-workflow/judge/trait-check/log.jsonl`.
+- **Scan** (by hand, not a hook): `judge trait-check --scan [--path <pathspec>...] [--trait <name>...]` judges whole tracked files as if newly added, to find existing debt. It reports both severities at `p ≥ 0.8`, one JSON line per finding on stdout, and logs no assessments.
 
 Install with `scripts/install-trait-check.sh --provider claude|codex|cursor` (`--uninstall` to remove it). `setup.sh` never runs this lever.
 
