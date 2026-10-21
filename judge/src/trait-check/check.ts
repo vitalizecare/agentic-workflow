@@ -1,17 +1,18 @@
 // `judge trait-check`: judge this repo's traits against what changed, with Jev.
 //   edit mode: the files the agent just edited, diffed against HEAD (PostToolUse).
 //   stop mode: everything on the branch since it left the base (Stop).
+//   scan mode: whole tracked files, judged as if newly added (finding existing debt).
 // Traits come from <repo>/.agents/traits/*.md plus a private overlay at
 // <state>/traits/<repo-name>/*.md; an overlay trait replaces a repo trait of the
 // same name, so a rule can be tuned locally before its PR.
 import path from "node:path";
 
 import { callJev, type JevDeps, type JevQuestion } from "../providers/jev-api.js";
-import { chunkFile, ignoredTraits, parseDiff, type Source } from "./diff.js";
+import { chunkFile, type FileDiff, ignoredTraits, parseDiff, type Source } from "./diff.js";
 import { inScope } from "./glob.js";
 import { parseTrait, type Trait } from "./trait.js";
 
-export type Mode = "edit" | "stop";
+export type Mode = "edit" | "stop" | "scan";
 
 export interface TraitCheckOptions {
   mode: Mode;
@@ -19,9 +20,14 @@ export interface TraitCheckOptions {
   files: readonly string[];
   /** Stop mode: the branch the work will merge into. */
   base: string;
+  /** Scan mode: git pathspecs to scan; empty scans every tracked file. */
+  paths?: readonly string[];
+  /** Only these traits; empty or absent means all. */
+  traits?: readonly string[];
   budgetMs: number;
   /** Lowest p(violation) reported. */
   minP: number;
+  concurrency?: number;
 }
 
 export interface TraitCheckDeps {
@@ -47,6 +53,7 @@ const MAX_QUESTION_CHARS = 30_000;
 const MAX_QUESTIONS = 16;
 const CONCURRENCY = 4;
 const MIN_CALL_BUDGET_MS = 1_000;
+const MAX_CALL_BUDGET_MS = 60_000;
 const DIFF_FLAGS = ["--no-color", "--no-ext-diff", "-U3", "--src-prefix=a/", "--dst-prefix=b/"];
 
 const CRITERIA = {
@@ -90,6 +97,21 @@ function loadTraits(deps: TraitCheckDeps, dirs: readonly string[]): Map<string, 
     }
   }
   return traits;
+}
+
+// Scan mode: every tracked file under the pathspecs, as one all-`+` hunk, so the
+// same question judges existing code. Files no active trait covers are never read.
+async function scannedFiles(deps: TraitCheckDeps, root: string, paths: readonly string[], traits: readonly Trait[]): Promise<FileDiff[]> {
+  const listed = await deps.git(["ls-files", "-z", "--", ...paths], root);
+  const files: FileDiff[] = [];
+  for (const file of listed.stdout.split("\0")) {
+    if (file === "" || !traits.some((t) => inScope(t.paths, file))) continue;
+    const text = deps.readFile(path.join(root, file));
+    if (text === null || text.includes("\0")) continue;
+    const lines = text.replace(/\n$/, "").split("\n");
+    files.push({ path: file, hunks: [{ start: 1, end: lines.length, text: [`@@ -0,0 +1,${lines.length} @@`, ...lines.map((l) => `+${l}`)].join("\n") }] });
+  }
+  return files;
 }
 
 async function changedDiff(deps: TraitCheckDeps, root: string, opts: TraitCheckOptions, files: readonly string[]): Promise<string> {
@@ -148,7 +170,9 @@ export async function runTraitCheck(deps: TraitCheckDeps, opts: TraitCheckOption
   const common = await deps.git(["rev-parse", "--path-format=absolute", "--git-common-dir"], root);
   const repoName = path.basename(path.dirname(common.stdout.trim()));
 
-  const traits = [...loadTraits(deps, [path.join(root, ".agents", "traits"), path.join(deps.stateDir, "traits", repoName)]).values()];
+  const only = new Set(opts.traits ?? []);
+  const traits = [...loadTraits(deps, [path.join(root, ".agents", "traits"), path.join(deps.stateDir, "traits", repoName)]).values()]
+    .filter((t) => only.size === 0 || only.has(t.name));
   if (traits.length === 0) return { status: "skipped", reason: "no-traits" };
 
   const files = opts.mode === "edit"
@@ -159,7 +183,10 @@ export async function runTraitCheck(deps: TraitCheckDeps, opts: TraitCheckOption
   }
 
   const tasks: { source: Source; batch: Trait[] }[] = [];
-  for (const file of parseDiff(await changedDiff(deps, root, opts, files))) {
+  const diffs = opts.mode === "scan"
+    ? await scannedFiles(deps, root, opts.paths ?? [], traits)
+    : parseDiff(await changedDiff(deps, root, opts, files));
+  for (const file of diffs) {
     const ignored = ignoredTraits((deps.readFile(path.join(root, file.path)) ?? "").slice(0, 4096));
     const active = traits.filter((t) => inScope(t.paths, file.path) && !ignored.has(t.name));
     if (active.length === 0) continue;
@@ -170,9 +197,10 @@ export async function runTraitCheck(deps: TraitCheckDeps, opts: TraitCheckOption
   }
   if (tasks.length === 0) return { status: "skipped", reason: "nothing-in-scope" };
 
-  const results = await pool(tasks, CONCURRENCY, async ({ source, batch }) => {
+  const results = await pool(tasks, opts.concurrency ?? CONCURRENCY, async ({ source, batch }) => {
     const questions = Object.fromEntries(batch.map((t) => [t.name, question(t)]));
-    const out = await callJev(deps.jev, { source }, questions, Math.max(deadline - deps.now(), MIN_CALL_BUDGET_MS));
+    const budget = Math.min(Math.max(deadline - deps.now(), MIN_CALL_BUDGET_MS), MAX_CALL_BUDGET_MS);
+    const out = await callJev(deps.jev, { source }, questions, budget);
     return { source, batch, out };
   });
 
@@ -189,8 +217,9 @@ export async function runTraitCheck(deps: TraitCheckDeps, opts: TraitCheckOption
       if (result === undefined || !result.ok || result.answer.type !== "choice") continue;
       const { choice, probabilities, confidence } = result.answer;
       const p = probabilities.violation ?? (choice === "violation" ? confidence : 0);
-      const reported = p >= opts.minP && (opts.mode === "edit" || trait.severity === "block");
-      deps.appendLog({ event: "assessment", mode: opts.mode, trait: trait.name, path: source.path, lines: [source.startLine, source.endLine], choice, p, reported });
+      const reported = p >= opts.minP && (opts.mode !== "stop" || trait.severity === "block");
+      // The log tunes the hook's thresholds; a scan's thousands of assessments would drown it.
+      if (opts.mode !== "scan") deps.appendLog({ event: "assessment", mode: opts.mode, trait: trait.name, path: source.path, lines: [source.startLine, source.endLine], choice, p, reported });
       if (reported) findings.push({ trait, source, p });
     }
   }
@@ -200,7 +229,14 @@ export async function runTraitCheck(deps: TraitCheckDeps, opts: TraitCheckOption
 
 const MAX_LISTED = 10;
 
-export function formatFindings(mode: Mode, findings: readonly Finding[], root: string): string {
+/** One JSON line per scan finding, highest p first, for tooling to triage. */
+export function formatScanFindings(findings: readonly Finding[]): string {
+  return findings
+    .map((f) => JSON.stringify({ trait: f.trait.name, severity: f.trait.severity, path: f.source.path, lines: [f.source.startLine, f.source.endLine], p: Number(f.p.toFixed(3)) }))
+    .join("\n");
+}
+
+export function formatFindings(mode: Exclude<Mode, "scan">, findings: readonly Finding[], root: string): string {
   const count = `${findings.length} project trait${findings.length === 1 ? "" : "s"}`;
   const head = mode === "edit"
     ? `trait-check: your last edit likely breaks ${count}. Fix each one that applies, or say in one line why it doesn't, then continue.`
